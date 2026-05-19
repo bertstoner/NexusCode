@@ -145,8 +145,10 @@ echo "  Node.js $("${NODE_BIN}" --version) OK"
 # ---------------------------------------------------------------------------
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  echo "  pnpm not found — installing..."
-  npm install -g pnpm
+  echo "  pnpm not found — installing via official installer..."
+  export PNPM_HOME="${HOME}/.local/share/pnpm"
+  curl -fsSL https://get.pnpm.io/install.sh | env PNPM_HOME="${PNPM_HOME}" sh -
+  export PATH="${PNPM_HOME}:${PATH}"
 fi
 
 if ! command -v pnpm >/dev/null 2>&1; then
@@ -157,12 +159,73 @@ echo "  pnpm v$(pnpm --version) OK"
 echo ""
 
 # ---------------------------------------------------------------------------
+# Ollama
+# ---------------------------------------------------------------------------
+
+if ! command -v ollama >/dev/null 2>&1; then
+  echo "  Ollama not found — installing..."
+  curl -fsSL https://ollama.ai/install.sh | sh
+fi
+
+if ! command -v ollama >/dev/null 2>&1; then
+  echo "  ERROR: Ollama installation did not succeed."
+  exit 1
+fi
+echo "  ollama $(ollama --version 2>/dev/null || echo 'OK')"
+
+# Detect Docker / container environment (no systemd init)
+in_container() {
+  [ -f /.dockerenv ] || grep -qa 'docker\|lxc\|containerd' /proc/1/cgroup 2>/dev/null
+}
+
+# Start Ollama if not already running
+if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+  echo "  Starting Ollama..."
+  if ! in_container && command -v systemctl >/dev/null 2>&1 && systemctl list-units --type=service 2>/dev/null | grep -q ollama; then
+    maybe_sudo systemctl enable --now ollama
+  else
+    # Docker / no-systemd: run in background, log to /tmp
+    ollama serve > /tmp/ollama.log 2>&1 &
+    OLLAMA_PID=$!
+    echo "  Ollama started in background (pid ${OLLAMA_PID}, log: /tmp/ollama.log)"
+    # Wait up to 30 s for the API to become ready
+    echo "  Waiting for Ollama API..."
+    for i in $(seq 1 30); do
+      if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+        break
+      fi
+      if ! kill -0 "${OLLAMA_PID}" 2>/dev/null; then
+        echo "  ERROR: Ollama process exited unexpectedly. Check /tmp/ollama.log"
+        exit 1
+      fi
+      sleep 1
+    done
+    if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+      echo "  ERROR: Ollama API did not become ready. Check /tmp/ollama.log"
+      exit 1
+    fi
+  fi
+fi
+
+# Pull default model if not already present
+DEFAULT_MODEL="llama3.1"
+if ! ollama list 2>/dev/null | grep -q "${DEFAULT_MODEL}"; then
+  echo "  Pulling ${DEFAULT_MODEL} (this may take a while)..."
+  ollama pull "${DEFAULT_MODEL}"
+fi
+echo "  Ollama + ${DEFAULT_MODEL} OK"
+echo ""
+
+# ---------------------------------------------------------------------------
 # Install dependencies
 # ---------------------------------------------------------------------------
 
 echo "  Installing dependencies..."
+# Run from workspace root so pnpm resolves the lockfile and workspace correctly
+WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${WORKSPACE_ROOT}"
+pnpm install --frozen-lockfile --ignore-scripts
 cd "${SCRIPT_DIR}"
-pnpm install --frozen-lockfile
 
 # ---------------------------------------------------------------------------
 # Build

@@ -1,0 +1,102 @@
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nexuscode}
+      POSTGRES_USER: ${POSTGRES_USER:-nexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexus}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Database migrations ─────────────────────────────────────────────────────
+  migrate:
+    build:
+      context: .
+      target: base
+    command: pnpm --filter @workspace/db run push
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexuscode}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  # ── API server ──────────────────────────────────────────────────────────────
+  api-server:
+    build:
+      context: .
+      target: api-server
+    environment:
+      PORT: 8080
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexuscode}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Frontend (mockup sandbox) ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      target: frontend
+    ports:
+      - "${FRONTEND_PORT:-8081}:80"
+    depends_on:
+      - api-server
+
+  # ── Ollama (local LLM) ──────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    # Uncomment for NVIDIA GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    profiles:
+      - cli
+
+  # ── code-ai CLI ─────────────────────────────────────────────────────────────
+  # Run with: docker compose run --rm code-ai
+  code-ai:
+    build:
+      context: .
+      target: cli
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+    volumes:
+      - code_ai_config:/root/.config/code-ai
+      - .:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    depends_on:
+      - ollama
+    profiles:
+      - cli
+
+volumes:
+  postgres_data:
+  ollama_data:
+  code_ai_config:
