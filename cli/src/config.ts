@@ -36,7 +36,9 @@ export function loadConfig(): Config {
   try {
     const raw = readFileSync(CONFIG_FILE, "utf-8");
     return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`Warning: could not parse config file (${msg}), using defaults.\n`);
     return { ...DEFAULTS };
   }
 }

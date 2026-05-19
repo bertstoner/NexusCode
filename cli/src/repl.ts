@@ -18,6 +18,7 @@ import {
 } from "./ui/renderer.js";
 import { printHelp } from "./ui/banner.js";
 import { listOllamaModels } from "./llm/ollama.js";
+import { compactHistory } from "./compact.js";
 
 export async function runRepl(): Promise<void> {
   let config = loadConfig();
@@ -73,6 +74,9 @@ export async function runRepl(): Promise<void> {
     if (input.startsWith("/")) {
       await handleCommand(input, config, (newConfig) => {
         config = newConfig;
+      }, history, (newHistory) => {
+        history.length = 0;
+        history.push(...newHistory);
       });
       prompt();
       continue;
@@ -86,7 +90,7 @@ export async function runRepl(): Promise<void> {
       await processMessage(history, config, currentAbortController);
       currentAbortController = null;
     } catch (err) {
-      if (err instanceof Error && err.message === "AbortError") {
+      if (err instanceof Error && err.name === "AbortError") {
         history.pop();
       } else {
         const msg = err instanceof Error ? err.message : String(err);
@@ -97,6 +101,18 @@ export async function runRepl(): Promise<void> {
 
     prompt();
   }
+}
+
+const MAX_HISTORY_MESSAGES = 40;
+
+function trimHistory(history: Message[]): Message[] {
+  if (history.length <= MAX_HISTORY_MESSAGES) return history;
+  const trimmed = history.slice(history.length - MAX_HISTORY_MESSAGES);
+  // Never start mid-tool-call: drop leading tool messages that have no matching assistant call
+  const firstUserOrAssistant = trimmed.findIndex(
+    (m) => m.role === "user" || m.role === "assistant"
+  );
+  return firstUserOrAssistant > 0 ? trimmed.slice(firstUserOrAssistant) : trimmed;
 }
 
 async function processMessage(
@@ -119,7 +135,7 @@ async function processMessage(
       thinkingInterval = renderThinking();
     }
 
-    const stream = streamLLM(config, history, tools, systemPrompt);
+    const stream = streamLLM(config, trimHistory(history), tools, systemPrompt, abort.signal);
     let firstToken = true;
     const pendingToolCalls: Array<{
       id: string;
@@ -231,7 +247,9 @@ async function processMessage(
 async function handleCommand(
   input: string,
   config: ReturnType<typeof loadConfig>,
-  setConfig: (c: ReturnType<typeof loadConfig>) => void
+  setConfig: (c: ReturnType<typeof loadConfig>) => void,
+  history: Message[],
+  setHistory: (h: Message[]) => void
 ): Promise<void> {
   const parts = input.slice(1).split(/\s+/);
   const cmd = parts[0]?.toLowerCase();
@@ -356,10 +374,26 @@ async function handleCommand(
     }
 
     case "compact": {
-      renderInfo(
-        "Compact not yet implemented — use /clear to reset history."
-      );
-      console.log();
+      if (history.length === 0) {
+        renderInfo("Nothing to compact — conversation history is empty.");
+        console.log();
+        break;
+      }
+      const originalCount = history.length;
+      const thinking = renderThinking();
+      try {
+        const { compacted, tokensSaved } = await compactHistory(history, config);
+        clearThinking(thinking);
+        setHistory(compacted);
+        renderSuccess(
+          `History compacted: ${originalCount} messages → 2  (~${Math.round(tokensSaved / 4)} tokens saved)`
+        );
+        console.log();
+      } catch (err) {
+        clearThinking(thinking);
+        renderError(err instanceof Error ? err.message : String(err));
+        console.log();
+      }
       break;
     }
 

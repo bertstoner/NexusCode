@@ -124,44 +124,48 @@ export async function runSetup(isFirstRun = false): Promise<void> {
       const finalKey =
         cerebrasKey || config.cerebrasApiKey || "";
 
-      console.log();
-      console.log(chalk.bold.white("  ── Model ──────────────────────────────────"));
-      console.log();
-      console.log(
-        "  " + chalk.cyan("1") + chalk.dim(" llama-3.3-70b") + chalk.white(" (recommended)")
-      );
-      console.log("  " + chalk.cyan("2") + chalk.dim(" llama-3.1-8b") + chalk.white(" (faster)"));
-      console.log("  " + chalk.cyan("3") + chalk.dim(" custom model name"));
-      console.log();
-
-      const modelChoice = await prompt(
-        rl2,
-        chalk.dim("  Select model [1]: ")
-      );
-
       let model = config.cerebrasModel;
-      if (modelChoice === "2") model = "llama-3.1-8b";
-      else if (modelChoice === "3") {
-        model = await prompt(rl2, chalk.dim("  Model name: "));
-      } else if (modelChoice === "1" || !modelChoice) {
-        model = "llama-3.3-70b";
+      let tavilyKey = "";
+
+      try {
+        console.log();
+        console.log(chalk.bold.white("  ── Model ──────────────────────────────────"));
+        console.log();
+        console.log(
+          "  " + chalk.cyan("1") + chalk.dim(" llama-3.3-70b") + chalk.white(" (recommended)")
+        );
+        console.log("  " + chalk.cyan("2") + chalk.dim(" llama-3.1-8b") + chalk.white(" (faster)"));
+        console.log("  " + chalk.cyan("3") + chalk.dim(" custom model name"));
+        console.log();
+
+        const modelChoice = await prompt(
+          rl2,
+          chalk.dim("  Select model [1]: ")
+        );
+
+        if (modelChoice === "2") model = "llama-3.1-8b";
+        else if (modelChoice === "3") {
+          model = await prompt(rl2, chalk.dim("  Model name: "));
+        } else if (modelChoice === "1" || !modelChoice) {
+          model = "llama-3.3-70b";
+        }
+
+        console.log();
+        console.log(chalk.bold.white("  ── Tavily Web Search ───────────────────────"));
+        console.log();
+        console.log(
+          chalk.dim("  Get your API key at: ") +
+            chalk.cyan("https://app.tavily.com")
+        );
+        console.log(
+          chalk.dim("  (Optional — skip to disable web search)")
+        );
+        console.log();
+      } finally {
+        rl2.close();
       }
 
-      console.log();
-      console.log(chalk.bold.white("  ── Tavily Web Search ───────────────────────"));
-      console.log();
-      console.log(
-        chalk.dim("  Get your API key at: ") +
-          chalk.cyan("https://app.tavily.com")
-      );
-      console.log(
-        chalk.dim("  (Optional — skip to disable web search)")
-      );
-      console.log();
-
-      rl2.close();
-
-      const tavilyKey = await promptHidden(
+      tavilyKey = await promptHidden(
         chalk.dim("  Tavily API key") +
           chalk.dim(config.tavilyApiKey ? " [keep existing]: " : " (optional): ")
       );

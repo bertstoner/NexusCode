@@ -81,7 +81,7 @@ export function printHelp(): void {
     "  " + chalk.cyan("/status") + chalk.dim(" ....................... ") + "Show current config & status"
   );
   console.log(
-    "  " + chalk.cyan("/compact") + chalk.dim(" ...................... ") + "Summarize & compact history"
+    "  " + chalk.cyan("/compact") + chalk.dim(" ...................... ") + "Summarize & compress history"
   );
   console.log(
     "  " + chalk.cyan("/exit") + chalk.dim("  ........................ ") + "Exit"

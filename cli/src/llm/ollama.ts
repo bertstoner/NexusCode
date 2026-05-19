@@ -28,7 +28,10 @@ export async function* streamOllama(
   model: string,
   messages: Message[],
   tools: ToolDefinition[],
-  systemPrompt: string
+  systemPrompt: string,
+  temperature: number = 0.2,
+  maxTokens: number = 8192,
+  signal?: AbortSignal
 ): AsyncGenerator<StreamChunk> {
   const body = {
     model,
@@ -46,8 +49,8 @@ export async function* streamOllama(
       },
     })),
     options: {
-      temperature: 0.2,
-      num_predict: 8192,
+      temperature,
+      num_predict: maxTokens,
     },
   };
 
@@ -55,6 +58,7 @@ export async function* streamOllama(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -98,7 +102,11 @@ export async function* streamOllama(
         }
 
         if (msg.tool_calls && msg.tool_calls.length > 0) {
-          accumulatedCalls.push(...msg.tool_calls);
+          const calls = msg.tool_calls.map((tc, i) => ({
+            ...tc,
+            id: tc.id || `ollama-tool-${Date.now()}-${i}`,
+          }));
+          accumulatedCalls.push(...calls);
         }
 
         if (parsed.done && accumulatedCalls.length > 0) {

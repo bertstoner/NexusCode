@@ -10,8 +10,10 @@ const isSetup = args.includes("--setup") || args.includes("-s");
 const isHelp = args.includes("--help") || args.includes("-h");
 const isVersion = args.includes("--version") || args.includes("-v");
 
+declare const __APP_VERSION__: string;
+
 if (isVersion) {
-  console.log("code-ai 1.0.0");
+  console.log(`code-ai ${__APP_VERSION__}`);
   process.exit(0);
 }
 

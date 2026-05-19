@@ -10,7 +10,8 @@ export function streamLLM(
   config: Config,
   messages: Message[],
   tools: ToolDefinition[],
-  systemPrompt: string
+  systemPrompt: string,
+  signal?: AbortSignal
 ): AsyncGenerator<StreamChunk> {
   if (config.provider === "cerebras") {
     if (!config.cerebrasApiKey) {
@@ -23,7 +24,10 @@ export function streamLLM(
       config.cerebrasModel,
       messages,
       tools,
-      systemPrompt
+      systemPrompt,
+      config.temperature,
+      config.maxTokens,
+      signal
     );
   } else {
     return streamOllama(
@@ -31,7 +35,10 @@ export function streamLLM(
       config.ollamaModel,
       messages,
       tools,
-      systemPrompt
+      systemPrompt,
+      config.temperature,
+      config.maxTokens,
+      signal
     );
   }
 }

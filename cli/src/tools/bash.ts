@@ -21,27 +21,10 @@ export const bashToolDefinition: ToolDefinition = {
   },
 };
 
-const DANGEROUS_PATTERNS = [
-  /rm\s+-rf\s+[/~]/,
-  /:\(\)\{.*\}/,
-  /dd\s+if=/,
-  /mkfs/,
-  /format\s+[a-z]:/i,
-  /shutdown/,
-  /reboot/,
-  /halt/,
-];
-
 export function executeBash(
   command: string,
   timeoutMs: number = 30000
 ): string {
-  for (const pattern of DANGEROUS_PATTERNS) {
-    if (pattern.test(command)) {
-      throw new Error(`Command rejected for safety: matches dangerous pattern`);
-    }
-  }
-
   const effectiveTimeout = Math.min(timeoutMs, 120000);
 
   try {

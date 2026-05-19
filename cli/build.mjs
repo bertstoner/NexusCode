@@ -1,5 +1,7 @@
 import esbuild from "esbuild";
-import { chmod } from "fs/promises";
+import { chmod, readFile } from "fs/promises";
+
+const pkg = JSON.parse(await readFile("package.json", "utf-8"));
 
 await esbuild.build({
   entryPoints: ["src/index.ts"],
@@ -29,6 +31,7 @@ await esbuild.build({
   ],
   define: {
     "process.env.NODE_ENV": '"production"',
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   minify: false,
   sourcemap: true,

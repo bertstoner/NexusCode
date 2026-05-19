@@ -30,7 +30,10 @@ export async function* streamCerebras(
   model: string,
   messages: Message[],
   tools: ToolDefinition[],
-  systemPrompt: string
+  systemPrompt: string,
+  temperature: number = 0.2,
+  maxTokens: number = 8192,
+  signal?: AbortSignal
 ): AsyncGenerator<StreamChunk> {
   const body = {
     model,
@@ -64,8 +67,8 @@ export async function* streamCerebras(
       },
     })),
     tool_choice: "auto",
-    max_tokens: 8192,
-    temperature: 0.2,
+    max_tokens: maxTokens,
+    temperature,
   };
 
   const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
@@ -75,6 +78,7 @@ export async function* streamCerebras(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
