@@ -20,7 +20,7 @@ const DEFAULTS: Config = {
   provider: "cerebras",
   ollamaBaseUrl: "http://localhost:11434",
   ollamaModel: "llama3.1",
-  cerebrasModel: "llama-3.3-70b",
+  cerebrasModel: "llama3.3-70b",
   maxTokens: 8192,
   temperature: 0.2,
 };

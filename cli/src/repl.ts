@@ -325,8 +325,12 @@ async function handleCommand(
       }
 
       if (sub === "cerebras") {
-        const newConfig = { ...config, provider: "cerebras" as const };
-        saveConfig({ provider: "cerebras" });
+        const newConfig = {
+          ...config,
+          provider: "cerebras" as const,
+          ...(arg3 ? { cerebrasModel: arg3 } : {}),
+        };
+        saveConfig({ provider: "cerebras", ...(arg3 ? { cerebrasModel: arg3 } : {}) });
         setConfig(newConfig);
         renderSuccess(`Switched to Cerebras AI (${newConfig.cerebrasModel})`);
         console.log();

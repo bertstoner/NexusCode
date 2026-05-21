@@ -90,7 +90,7 @@ export async function runSetup(isFirstRun = false): Promise<void> {
       "  " +
         chalk.cyan("1") +
         chalk.white(" Cerebras AI") +
-        chalk.dim(" (online, fast — llama-3.3-70b and more)")
+        chalk.dim(" (online, fast — llama3.3-70b and more)")
     );
     console.log(
       "  " +
@@ -142,9 +142,9 @@ export async function runSetup(isFirstRun = false): Promise<void> {
         console.log(chalk.bold.white("  ── Model ──────────────────────────────────"));
         console.log();
         console.log(
-          "  " + chalk.cyan("1") + chalk.dim(" llama-3.3-70b") + chalk.white(" (recommended)")
+          "  " + chalk.cyan("1") + chalk.dim(" llama3.3-70b") + chalk.white(" (recommended)")
         );
-        console.log("  " + chalk.cyan("2") + chalk.dim(" llama-3.1-8b") + chalk.white(" (faster)"));
+        console.log("  " + chalk.cyan("2") + chalk.dim(" llama3.1-8b") + chalk.white(" (faster)"));
         console.log("  " + chalk.cyan("3") + chalk.dim(" custom model name"));
         console.log();
 
@@ -153,11 +153,11 @@ export async function runSetup(isFirstRun = false): Promise<void> {
           chalk.dim("  Select model [1]: ")
         );
 
-        if (modelChoice === "2") model = "llama-3.1-8b";
+        if (modelChoice === "2") model = "llama3.1-8b";
         else if (modelChoice === "3") {
           model = await prompt(rl2, chalk.dim("  Model name: "));
         } else if (modelChoice === "1" || !modelChoice) {
-          model = "llama-3.3-70b";
+          model = "llama3.3-70b";
         }
 
         console.log();
