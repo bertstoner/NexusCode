@@ -54,12 +54,22 @@ export async function* streamOllama(
     },
   };
 
-  const response = await fetch(`${baseUrl}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
+    throw new Error(
+      `Cannot connect to Ollama at ${baseUrl}.\n` +
+      `  Make sure Ollama is running: ollama serve\n` +
+      `  Or switch providers with: /model cerebras`
+    );
+  }
 
   if (!response.ok) {
     const text = await response.text();
