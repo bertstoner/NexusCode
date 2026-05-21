@@ -17,30 +17,40 @@ function promptHidden(question: string): Promise<string> {
     const stdin = process.stdin;
     const wasRaw = stdin.isRaw;
     let input = "";
+    let done = false;
 
-    if (stdin.setRawMode) {
-      stdin.setRawMode(true);
-    }
+    if (stdin.setRawMode) stdin.setRawMode(true);
     stdin.resume();
     stdin.setEncoding("utf-8");
 
-    const onData = (char: string) => {
-      if (char === "\n" || char === "\r" || char === "\u0004") {
-        if (stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
-        stdin.pause();
-        stdin.removeListener("data", onData);
-        process.stdout.write("\n");
-        resolve(input);
-      } else if (char === "\u0003") {
-        process.exit(0);
-      } else if (char === "\u007f" || char === "\b") {
-        if (input.length > 0) {
-          input = input.slice(0, -1);
-          process.stdout.write("\b \b");
+    const submit = () => {
+      if (done) return;
+      done = true;
+      if (stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
+      stdin.pause();
+      stdin.removeListener("data", onData);
+      process.stdout.write("\n");
+      resolve(input.trim());
+    };
+
+    const onData = (chunk: string) => {
+      // Iterate char-by-char so paste (multi-char chunk) is handled correctly
+      for (const char of chunk) {
+        if (done) return;
+        if (char === "\n" || char === "\r" || char === "") {
+          submit();
+          return;
+        } else if (char === "") {
+          process.exit(0);
+        } else if (char === "" || char === "\b") {
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            process.stdout.write("\b \b");
+          }
+        } else {
+          input += char;
+          process.stdout.write("*");
         }
-      } else {
-        input += char;
-        process.stdout.write("*");
       }
     };
 
