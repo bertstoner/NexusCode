@@ -51,6 +51,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
+# Install Ollama so the entrypoint can start it when no external service is present
+RUN curl -fsSL https://ollama.ai/install.sh | sh
+
 WORKDIR /app
 COPY --from=cli-build /app /app
 COPY cli/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

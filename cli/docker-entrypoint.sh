@@ -4,21 +4,57 @@ set -e
 OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.1}"
 
-# Wait for Ollama to be ready (up to 60 s)
-echo "  Waiting for Ollama at ${OLLAMA_BASE_URL}..."
-for i in $(seq 1 60); do
-  if curl -sf "${OLLAMA_BASE_URL}/api/tags" >/dev/null 2>&1; then
-    break
+# ---------------------------------------------------------------------------
+# Start Ollama locally if the URL points at localhost and it isn't running yet
+# ---------------------------------------------------------------------------
+is_local_ollama() {
+  echo "${OLLAMA_BASE_URL}" | grep -qE "localhost|127\.0\.0\.1"
+}
+
+if ! curl -sf "${OLLAMA_BASE_URL}/api/tags" >/dev/null 2>&1; then
+  if is_local_ollama && command -v ollama >/dev/null 2>&1; then
+    echo "  Starting Ollama..."
+    ollama serve > /tmp/ollama.log 2>&1 &
+    OLLAMA_PID=$!
+
+    # Wait up to 30 s for it to become ready
+    for i in $(seq 1 30); do
+      if curl -sf "${OLLAMA_BASE_URL}/api/tags" >/dev/null 2>&1; then
+        break
+      fi
+      if ! kill -0 "${OLLAMA_PID}" 2>/dev/null; then
+        echo "  ERROR: ollama serve exited unexpectedly. Check /tmp/ollama.log" >&2
+        exit 1
+      fi
+      sleep 1
+    done
+
+    if ! curl -sf "${OLLAMA_BASE_URL}/api/tags" >/dev/null 2>&1; then
+      echo "  ERROR: Ollama did not become ready. Check /tmp/ollama.log" >&2
+      exit 1
+    fi
+    echo "  Ollama started (pid ${OLLAMA_PID})."
+  else
+    # Remote Ollama — wait up to 60 s for it to appear
+    echo "  Waiting for Ollama at ${OLLAMA_BASE_URL}..."
+    for i in $(seq 1 60); do
+      if curl -sf "${OLLAMA_BASE_URL}/api/tags" >/dev/null 2>&1; then
+        break
+      fi
+      if [ "$i" -eq 60 ]; then
+        echo "  ERROR: Ollama did not become ready in time." >&2
+        exit 1
+      fi
+      sleep 1
+    done
   fi
-  if [ "$i" -eq 60 ]; then
-    echo "  ERROR: Ollama did not become ready in time." >&2
-    exit 1
-  fi
-  sleep 1
-done
+fi
+
 echo "  Ollama ready."
 
+# ---------------------------------------------------------------------------
 # Pull model if not already present
+# ---------------------------------------------------------------------------
 if ! curl -sf "${OLLAMA_BASE_URL}/api/tags" | grep -q "\"${OLLAMA_MODEL}\""; then
   echo "  Pulling ${OLLAMA_MODEL} (this may take a while)..."
   curl -s -X POST "${OLLAMA_BASE_URL}/api/pull" \
@@ -32,7 +68,9 @@ if ! curl -sf "${OLLAMA_BASE_URL}/api/tags" | grep -q "\"${OLLAMA_MODEL}\""; the
   echo "  Model ready."
 fi
 
-# Write default config if none exists — points at the compose Ollama service
+# ---------------------------------------------------------------------------
+# Write default config if none exists
+# ---------------------------------------------------------------------------
 CONFIG_FILE="${HOME}/.config/nexus/config.json"
 if [ ! -f "${CONFIG_FILE}" ]; then
   mkdir -p "$(dirname "${CONFIG_FILE}")"
