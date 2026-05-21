@@ -295,20 +295,35 @@ async function handleCommand(
         console.log(
           "  " + chalk.dim("Model:     ") + chalk.white(config.cerebrasModel)
         );
-        console.log(
-          "  " +
-            chalk.dim("API Key:   ") +
-            (config.cerebrasApiKey
-              ? chalk.green("✓ configured")
-              : chalk.red("✗ missing"))
-        );
+        process.stdout.write("  " + chalk.dim("API Key:   "));
+        if (!config.cerebrasApiKey) {
+          process.stdout.write(chalk.red("✗ missing\n"));
+        } else {
+          process.stdout.write(chalk.dim("checking…"));
+          try {
+            const res = await fetch("https://api.cerebras.ai/v1/models", {
+              headers: { Authorization: `Bearer ${config.cerebrasApiKey}` },
+              signal: AbortSignal.timeout(5000),
+            });
+            process.stdout.write(
+              "\r  " + chalk.dim("API Key:   ") +
+              (res.ok ? chalk.green("✓ valid\n") : chalk.red(`✗ rejected (HTTP ${res.status})\n`))
+            );
+          } catch {
+            process.stdout.write("\r  " + chalk.dim("API Key:   ") + chalk.yellow("✓ set (could not verify)\n"));
+          }
+        }
       } else {
         console.log(
           "  " + chalk.dim("Model:     ") + chalk.white(config.ollamaModel)
         );
-        console.log(
-          "  " + chalk.dim("URL:       ") + chalk.white(config.ollamaBaseUrl)
-        );
+        process.stdout.write("  " + chalk.dim("URL:       ") + chalk.white(config.ollamaBaseUrl) + "  ");
+        try {
+          const res = await fetch(`${config.ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+          process.stdout.write(res.ok ? chalk.green("✓ reachable\n") : chalk.red(`✗ HTTP ${res.status}\n`));
+        } catch {
+          process.stdout.write(chalk.red("✗ not reachable\n"));
+        }
       }
       console.log(
         "  " +
