@@ -27,22 +27,26 @@ export async function executeTool(
   config: Config
 ): Promise<string> {
   switch (name) {
-    case "read_file":
-      return await readFile(
-        input.path as string,
-        input.start_line as number | undefined,
-        input.end_line as number | undefined
-      );
+    case "read_file": {
+      const path = input.path;
+      if (!path || typeof path !== "string") return "Error: read_file requires a 'path' string";
+      return await readFile(path, input.start_line as number | undefined, input.end_line as number | undefined);
+    }
 
-    case "write_file":
-      return writeFile(input.path as string, input.content as string);
+    case "write_file": {
+      const path = input.path;
+      if (!path || typeof path !== "string") return "Error: write_file requires a 'path' string";
+      if (input.content === undefined || input.content === null) return "Error: write_file requires a 'content' string";
+      return writeFile(path, String(input.content));
+    }
 
-    case "edit_file":
-      return editFile(
-        input.path as string,
-        input.old_string as string,
-        input.new_string as string
-      );
+    case "edit_file": {
+      const path = input.path;
+      if (!path || typeof path !== "string") return "Error: edit_file requires a 'path' string";
+      if (input.old_string === undefined) return "Error: edit_file requires an 'old_string'";
+      if (input.new_string === undefined) return "Error: edit_file requires a 'new_string'";
+      return editFile(path, String(input.old_string), String(input.new_string));
+    }
 
     case "list_directory":
       return listDirectory(
@@ -56,18 +60,17 @@ export async function executeTool(
         input.cwd as string | undefined
       );
 
-    case "bash":
-      return executeBash(
-        input.command as string,
-        (input.timeout as number | undefined) ?? 30000
-      );
+    case "bash": {
+      const command = input.command;
+      if (!command || typeof command !== "string") return "Error: bash requires a 'command' string";
+      return executeBash(command, (input.timeout as number | undefined) ?? 30000);
+    }
 
-    case "web_search":
-      return await webSearch(
-        input.query as string,
-        config.tavilyApiKey ?? "",
-        (input.max_results as number | undefined) ?? 5
-      );
+    case "web_search": {
+      const query = input.query;
+      if (!query || typeof query !== "string") return "Error: web_search requires a 'query' string";
+      return await webSearch(query, config.tavilyApiKey ?? "", (input.max_results as number | undefined) ?? 5);
+    }
 
     default:
       throw new Error(`Unknown tool: ${name}`);

@@ -240,6 +240,9 @@ export async function globFiles(
   pattern: string,
   cwd?: string
 ): Promise<string> {
+  if (!pattern || typeof pattern !== "string") {
+    return "Error: glob requires a non-empty pattern string (e.g. \"**/*.ts\")";
+  }
   const results = await glob(pattern, {
     cwd: cwd ? resolve(cwd) : process.cwd(),
     ignore: ["node_modules/**", ".git/**", "dist/**"],
