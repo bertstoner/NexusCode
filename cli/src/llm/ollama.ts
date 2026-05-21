@@ -23,6 +23,55 @@ export interface StreamChunk {
   toolCalls?: OllamaToolCall[];
 }
 
+async function pullOllamaModel(baseUrl: string, model: string): Promise<void> {
+  process.stdout.write(`  Pulling model ${model}...`);
+
+  const res = await fetch(`${baseUrl}/api/pull`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: model }),
+  });
+
+  if (!res.ok || !res.body) {
+    process.stdout.write(" failed\n");
+    throw new Error(`Failed to pull model ${model}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let lastStatus = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line) as {
+          status?: string;
+          completed?: number;
+          total?: number;
+        };
+        if (parsed.status && parsed.status !== lastStatus) {
+          lastStatus = parsed.status;
+          if (parsed.total && parsed.completed) {
+            const pct = Math.round((parsed.completed / parsed.total) * 100);
+            process.stdout.write(`\r  Pulling ${model}: ${parsed.status} ${pct}%   `);
+          } else {
+            process.stdout.write(`\r  Pulling ${model}: ${parsed.status}          `);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  process.stdout.write(`\r  Model ${model} ready.                          \n`);
+}
+
 export async function* streamOllama(
   baseUrl: string,
   model: string,
@@ -69,6 +118,25 @@ export async function* streamOllama(
       `  Make sure Ollama is running: ollama serve\n` +
       `  Or switch providers with: /model cerebras`
     );
+  }
+
+  // Auto-pull model if not found, then retry once
+  if (response.status === 404) {
+    const text = await response.text();
+    if (text.includes("model") && text.includes("not found")) {
+      await pullOllamaModel(baseUrl, model);
+      try {
+        response = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal,
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") throw err;
+        throw new Error(`Cannot connect to Ollama at ${baseUrl}.`);
+      }
+    }
   }
 
   if (!response.ok) {
