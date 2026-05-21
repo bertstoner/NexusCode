@@ -19,6 +19,7 @@ import {
 import { printHelp } from "./ui/banner.js";
 import { listOllamaModels } from "./llm/ollama.js";
 import { compactHistory } from "./compact.js";
+import { ensureOllama } from "./ollama-start.js";
 
 export async function runRepl(): Promise<void> {
   let config = loadConfig();
@@ -94,8 +95,22 @@ export async function runRepl(): Promise<void> {
         history.pop();
       } else {
         const msg = err instanceof Error ? err.message : String(err);
-        renderError(msg);
-        history.pop();
+        // If Ollama dropped, try to restart it then retry once
+        if (config.provider === "ollama" && msg.includes("Cannot connect to Ollama")) {
+          renderInfo("Ollama connection lost — attempting to restart…");
+          await ensureOllama(config.ollamaBaseUrl);
+          try {
+            currentAbortController = new AbortController();
+            await processMessage(history, config, currentAbortController);
+            currentAbortController = null;
+          } catch (retryErr) {
+            history.pop();
+            renderError(retryErr instanceof Error ? retryErr.message : String(retryErr));
+          }
+        } else {
+          renderError(msg);
+          history.pop();
+        }
       }
     }
 
