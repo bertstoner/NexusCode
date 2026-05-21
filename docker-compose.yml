@@ -61,6 +61,10 @@ services:
   # ── Ollama (local LLM) ──────────────────────────────────────────────────────
   ollama:
     image: ollama/ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
     # Uncomment for NVIDIA GPU support:
