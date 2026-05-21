@@ -33,7 +33,7 @@ if ! curl -sf "${OLLAMA_BASE_URL}/api/tags" | grep -q "\"${OLLAMA_MODEL}\""; the
 fi
 
 # Write default config if none exists — points at the compose Ollama service
-CONFIG_FILE="${HOME}/.config/code-ai/config.json"
+CONFIG_FILE="${HOME}/.config/nexus/config.json"
 if [ ! -f "${CONFIG_FILE}" ]; then
   mkdir -p "$(dirname "${CONFIG_FILE}")"
   cat > "${CONFIG_FILE}" <<EOF

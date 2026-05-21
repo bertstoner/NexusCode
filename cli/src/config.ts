@@ -13,7 +13,7 @@ export interface Config {
   temperature: number;
 }
 
-const CONFIG_DIR = join(homedir(), ".config", "code-ai");
+const CONFIG_DIR = join(homedir(), ".config", "nexus");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 
 const DEFAULTS: Config = {

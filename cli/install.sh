@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# code-ai installer
+# nexus installer
 # Auto-installs all prerequisites (curl, git, Node.js 22, pnpm), then builds
-# and installs code-ai.
+# and installs nexus.
 #
 # Usage:
 #   sudo ./install.sh          # system-wide  (/usr/local/bin)
@@ -16,10 +16,10 @@ if [ "$(id -u)" = "0" ]; then
 else
   INSTALL_DIR="${HOME}/.local/bin"
 fi
-WRAPPER="${INSTALL_DIR}/code-ai"
+WRAPPER="${INSTALL_DIR}/nexus"
 
 echo ""
-echo "  Installing code-ai CLI..."
+echo "  Installing nexus CLI..."
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -145,10 +145,8 @@ echo "  Node.js $("${NODE_BIN}" --version) OK"
 # ---------------------------------------------------------------------------
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  echo "  pnpm not found — installing via official installer..."
-  export PNPM_HOME="${HOME}/.local/share/pnpm"
-  curl -fsSL https://get.pnpm.io/install.sh | env PNPM_HOME="${PNPM_HOME}" sh -
-  export PATH="${PNPM_HOME}:${PATH}"
+  echo "  pnpm not found — installing..."
+  npm install -g pnpm
 fi
 
 if ! command -v pnpm >/dev/null 2>&1; then
@@ -257,16 +255,16 @@ echo ""
 # ---------------------------------------------------------------------------
 
 if echo "${PATH}" | grep -q "${INSTALL_DIR}"; then
-  echo "  Run it with: code-ai"
+  echo "  Run it with: nexus"
 elif [ "${INSTALL_DIR}" = "/usr/local/bin" ]; then
-  echo "  Run it with: code-ai"
+  echo "  Run it with: nexus"
 else
   echo "  Add ~/.local/bin to your PATH:"
   echo ""
   echo "    echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
   echo "    source ~/.bashrc"
   echo ""
-  echo "  Then run: code-ai"
+  echo "  Then run: nexus"
 fi
 echo ""
 
@@ -274,11 +272,11 @@ echo ""
 # First-run hint
 # ---------------------------------------------------------------------------
 
-if [ ! -f "${HOME}/.config/code-ai/config.json" ]; then
+if [ ! -f "${HOME}/.config/nexus/config.json" ]; then
   echo "  No config found. Run the setup wizard next:"
   echo ""
-  echo "    code-ai --setup"
+  echo "    nexus --setup"
   echo ""
-  echo "  Or just run code-ai — setup runs automatically on first launch."
+  echo "  Or just run nexus — setup runs automatically on first launch."
   echo ""
 fi

@@ -4,7 +4,7 @@
   "description": "Claude Code-style AI coding assistant CLI with Ollama and Cerebras support",
   "private": true,
   "bin": {
-    "code-ai": "./dist/index.js"
+    "nexus": "./dist/index.js"
   },
   "scripts": {
     "dev": "node --enable-source-maps --import=tsx/esm src/index.ts",

@@ -13,19 +13,19 @@ const isVersion = args.includes("--version") || args.includes("-v");
 declare const __APP_VERSION__: string;
 
 if (isVersion) {
-  console.log(`code-ai ${__APP_VERSION__}`);
+  console.log(`nexus ${__APP_VERSION__}`);
   process.exit(0);
 }
 
 if (isHelp) {
   console.log(`
-${chalk.bold.cyan("code-ai")} — AI Coding Assistant
+${chalk.bold.cyan("nexus")} — AI Coding Assistant
 
 ${chalk.bold("Usage:")}
-  code-ai              Start interactive session
-  code-ai --setup      Configure provider and API keys
-  code-ai --version    Show version
-  code-ai --help       Show this help
+  nexus              Start interactive session
+  nexus --setup      Configure provider and API keys
+  nexus --version    Show version
+  nexus --help       Show this help
 
 ${chalk.bold("Providers:")}
   Cerebras AI    Fast online inference (llama-3.3-70b and more)
@@ -39,7 +39,7 @@ ${chalk.bold("In-session commands:")}
   /exit          Exit the session
 
 ${chalk.bold("Config location:")}
-  ~/.config/code-ai/config.json
+  ~/.config/nexus/config.json
 `);
   process.exit(0);
 }
@@ -53,7 +53,7 @@ async function main() {
   if (!configExists()) {
     console.log();
     console.log(
-      chalk.bold.cyan("  Welcome to code-ai!") +
+      chalk.bold.cyan("  Welcome to nexus!") +
         chalk.dim(" First-time setup required.")
     );
     await runSetup(true);

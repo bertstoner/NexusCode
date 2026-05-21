@@ -54,17 +54,17 @@ export async function runSetup(isFirstRun = false): Promise<void> {
   console.log();
   if (isFirstRun) {
     console.log(chalk.bold.cyan("  ╭─────────────────────────────────────╮"));
-    console.log(chalk.bold.cyan("  │     Welcome to code-ai setup!       │"));
+    console.log(chalk.bold.cyan("  │     Welcome to nexus setup!       │"));
     console.log(chalk.bold.cyan("  ╰─────────────────────────────────────╯"));
     console.log();
     console.log(
       chalk.white("  Let's configure your AI coding assistant.")
     );
     console.log(
-      chalk.dim("  You can re-run setup anytime with: code-ai --setup")
+      chalk.dim("  You can re-run setup anytime with: nexus --setup")
     );
   } else {
-    console.log(chalk.bold.white("  code-ai Configuration"));
+    console.log(chalk.bold.white("  nexus Configuration"));
   }
   console.log();
 
@@ -182,7 +182,7 @@ export async function runSetup(isFirstRun = false): Promise<void> {
       console.log(chalk.green("  ✓ Configuration saved to: ") + chalk.dim(getConfigPath()));
       console.log();
       console.log(
-        chalk.white("  Ready! Start coding with: ") + chalk.cyan("code-ai")
+        chalk.white("  Ready! Start coding with: ") + chalk.cyan("nexus")
       );
       console.log();
     } else {
@@ -271,7 +271,7 @@ export async function runSetup(isFirstRun = false): Promise<void> {
       console.log(chalk.green("  ✓ Configuration saved to: ") + chalk.dim(getConfigPath()));
       console.log();
       console.log(
-        chalk.white("  Ready! Start coding with: ") + chalk.cyan("code-ai")
+        chalk.white("  Ready! Start coding with: ") + chalk.cyan("nexus")
       );
       console.log();
     }

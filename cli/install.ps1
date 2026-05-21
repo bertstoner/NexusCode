@@ -1,4 +1,4 @@
-# code-ai installer for Windows
+# nexus installer for Windows
 # Auto-installs Node.js (via winget) and pnpm (via npm) if missing.
 #
 # Usage (from PowerShell):
@@ -11,11 +11,11 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallDir = Join-Path $env:USERPROFILE ".local\bin"
-$WrapperCmd = Join-Path $InstallDir "code-ai.cmd"
+$WrapperCmd = Join-Path $InstallDir "nexus.cmd"
 $DistPath   = Join-Path $ScriptDir "dist\index.js"
 
 Write-Host ""
-Write-Host "  Installing code-ai CLI..."
+Write-Host "  Installing nexus CLI..."
 Write-Host ""
 
 # ---------------------------------------------------------------------------
@@ -148,21 +148,21 @@ if ($userPath -notlike "*$InstallDir*") {
     $newPath = "$InstallDir;$userPath".TrimEnd(";")
     [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
     Write-Host "  Added $InstallDir to your user PATH."
-    Write-Host "  Restart your terminal, then run: code-ai"
+    Write-Host "  Restart your terminal, then run: nexus"
 } else {
-    Write-Host "  Run it with: code-ai"
+    Write-Host "  Run it with: nexus"
 }
 Write-Host ""
 
 # ---------------------------------------------------------------------------
 # First-run hint
 # ---------------------------------------------------------------------------
-$configPath = Join-Path $env:USERPROFILE ".config\code-ai\config.json"
+$configPath = Join-Path $env:USERPROFILE ".config\nexus\config.json"
 if (-not (Test-Path $configPath)) {
     Write-Host "  No config found. Run the setup wizard next:"
     Write-Host ""
-    Write-Host "    code-ai --setup"
+    Write-Host "    nexus --setup"
     Write-Host ""
-    Write-Host "  Or just run code-ai — setup runs automatically on first launch."
+    Write-Host "  Or just run nexus — setup runs automatically on first launch."
     Write-Host ""
 }

@@ -13,7 +13,7 @@ export function printBanner(config: Config): void {
   );
   console.log(
     chalk.bold.white("  │") +
-      chalk.bold.cyan("         code-ai  ✦  AI Coding Assistant       ") +
+      chalk.bold.cyan("         nexus  ✦  AI Coding Assistant       ") +
       chalk.bold.white("│")
   );
   console.log(
