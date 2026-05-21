@@ -3,6 +3,72 @@ import chalk from "chalk";
 import { saveConfig, loadConfig, getConfigPath } from "./config.js";
 import { listOllamaModels } from "./llm/ollama.js";
 
+// ---------------------------------------------------------------------------
+// Arrow-key dropdown selector
+// ---------------------------------------------------------------------------
+
+function promptSelect(label: string, items: string[], defaultIndex = 0): Promise<number> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    let selected = Math.max(0, Math.min(defaultIndex, items.length - 1));
+    let done = false;
+
+    const render = () => {
+      // Move cursor up to redraw the list
+      if (renderCount > 0) {
+        process.stdout.write(`\x1b[${renderCount}A`);
+      }
+      items.forEach((item, i) => {
+        const line = i === selected
+          ? `  ${chalk.cyan("❯")} ${chalk.bold.white(item)}`
+          : `    ${chalk.dim(item)}`;
+        process.stdout.write(`\r${line}\x1b[K\n`);
+      });
+      renderCount = items.length;
+    };
+
+    let renderCount = 0;
+    console.log();
+    console.log(chalk.bold.white(`  ${label}`));
+    console.log();
+    render();
+
+    if (stdin.setRawMode) stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf-8");
+
+    const onData = (chunk: string) => {
+      if (done) return;
+
+      if (chunk === "\x1b[A" || chunk === "\x1b\x5b\x41") {
+        // Up arrow
+        selected = (selected - 1 + items.length) % items.length;
+        render();
+      } else if (chunk === "\x1b[B" || chunk === "\x1b\x5b\x42") {
+        // Down arrow
+        selected = (selected + 1) % items.length;
+        render();
+      } else if (chunk === "\r" || chunk === "\n" || chunk === "") {
+        done = true;
+        if (stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
+        stdin.pause();
+        stdin.removeListener("data", onData);
+        console.log();
+        resolve(selected);
+      } else if (chunk === "") {
+        process.exit(0);
+      }
+    };
+
+    stdin.on("data", onData);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Plain text prompt
+// ---------------------------------------------------------------------------
+
 function prompt(rl: readline.Interface, question: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
@@ -10,6 +76,10 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
     });
   });
 }
+
+// ---------------------------------------------------------------------------
+// Hidden input (API keys)
+// ---------------------------------------------------------------------------
 
 function promptHidden(question: string): Promise<string> {
   return new Promise((resolve) => {
@@ -34,7 +104,6 @@ function promptHidden(question: string): Promise<string> {
     };
 
     const onData = (chunk: string) => {
-      // Iterate char-by-char so paste (multi-char chunk) is handled correctly
       for (const char of chunk) {
         if (done) return;
         if (char === "\n" || char === "\r" || char === "") {
@@ -58,237 +127,179 @@ function promptHidden(question: string): Promise<string> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Setup wizard
+// ---------------------------------------------------------------------------
+
 export async function runSetup(isFirstRun = false): Promise<void> {
   const config = loadConfig();
 
   console.log();
   if (isFirstRun) {
     console.log(chalk.bold.cyan("  ╭─────────────────────────────────────╮"));
-    console.log(chalk.bold.cyan("  │     Welcome to nexus setup!       │"));
+    console.log(chalk.bold.cyan("  │     Welcome to nexus setup!         │"));
     console.log(chalk.bold.cyan("  ╰─────────────────────────────────────╯"));
     console.log();
-    console.log(
-      chalk.white("  Let's configure your AI coding assistant.")
-    );
-    console.log(
-      chalk.dim("  You can re-run setup anytime with: nexus --setup")
-    );
+    console.log(chalk.white("  Let's configure your AI coding assistant."));
+    console.log(chalk.dim("  You can re-run setup anytime with: nexus --setup"));
   } else {
     console.log(chalk.bold.white("  nexus Configuration"));
   }
+
+  // ── Provider ──────────────────────────────────────────────────────────────
+  console.log();
+  console.log(chalk.bold.white("  ── Provider ──────────────────────────────"));
+
+  const providerItems = [
+    "Cerebras AI  (online, fast — llama3.3-70b and more)",
+    "Ollama       (local, private — any installed model)",
+  ];
+  const providerDefault = config.provider === "ollama" ? 1 : 0;
+  const providerIdx = await promptSelect("Select provider", providerItems, providerDefault);
+  const provider = providerIdx === 1 ? "ollama" : "cerebras";
+
   console.log();
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  try {
-    console.log(chalk.bold.white("  ── Provider ──────────────────────────────"));
+  // ── Cerebras ──────────────────────────────────────────────────────────────
+  if (provider === "cerebras") {
+    console.log(chalk.bold.white("  ── Cerebras AI ────────────────────────────"));
     console.log();
-    console.log(
-      "  " +
-        chalk.cyan("1") +
-        chalk.white(" Cerebras AI") +
-        chalk.dim(" (online, fast — llama3.3-70b and more)")
-    );
-    console.log(
-      "  " +
-        chalk.cyan("2") +
-        chalk.white(" Ollama") +
-        chalk.dim(" (local, private — any installed model)")
-    );
+    console.log(chalk.dim("  Get your API key at: ") + chalk.cyan("https://cloud.cerebras.ai"));
     console.log();
 
-    const defaultChoice = config.provider === "ollama" ? "2" : "1";
-    const providerChoice = await prompt(
-      rl,
-      chalk.dim(`  Select provider [${defaultChoice}]: `)
+    const cerebrasKey = await promptHidden(
+      chalk.dim("  Cerebras API key") +
+        chalk.dim(config.cerebrasApiKey ? " [keep existing]: " : ": ")
     );
+    const finalKey = cerebrasKey || config.cerebrasApiKey || "";
 
-    const provider =
-      providerChoice === "2" ? "ollama" : "cerebras";
+    // Model selection
+    const cerebrasModelItems = [
+      "llama3.3-70b  (recommended)",
+      "llama3.1-8b   (faster, lower memory)",
+      "custom model name…",
+    ];
+    const currentCerebrasIdx =
+      config.cerebrasModel === "llama3.1-8b" ? 1 : 0;
 
     console.log();
+    console.log(chalk.bold.white("  ── Model ──────────────────────────────────"));
 
-    if (provider === "cerebras") {
-      console.log(chalk.bold.white("  ── Cerebras AI ────────────────────────────"));
-      console.log();
-      console.log(
-        chalk.dim("  Get your API key at: ") +
-          chalk.cyan("https://cloud.cerebras.ai")
-      );
-      console.log();
+    const modelIdx = await promptSelect("Select model", cerebrasModelItems, currentCerebrasIdx);
 
+    let model = config.cerebrasModel;
+    if (modelIdx === 0) model = "llama3.3-70b";
+    else if (modelIdx === 1) model = "llama3.1-8b";
+    else {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      model = await prompt(rl, chalk.dim("  Model name: "));
       rl.close();
-      const cerebrasKey = await promptHidden(
-        chalk.dim("  Cerebras API key") +
-          chalk.dim(config.cerebrasApiKey ? " [keep existing]: " : ": ")
-      );
+    }
 
-      const rl2 = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
+    // Tavily
+    console.log();
+    console.log(chalk.bold.white("  ── Tavily Web Search (optional) ────────────"));
+    console.log();
+    console.log(chalk.dim("  Get your API key at: ") + chalk.cyan("https://app.tavily.com"));
+    console.log();
 
-      const finalKey =
-        cerebrasKey || config.cerebrasApiKey || "";
+    const tavilyKey = await promptHidden(
+      chalk.dim("  Tavily API key") +
+        chalk.dim(config.tavilyApiKey ? " [keep existing]: " : " (optional): ")
+    );
+    const finalTavilyKey = tavilyKey || config.tavilyApiKey || "";
 
-      let model = config.cerebrasModel;
-      let tavilyKey = "";
+    saveConfig({
+      provider: "cerebras",
+      cerebrasApiKey: finalKey,
+      cerebrasModel: model,
+      tavilyApiKey: finalTavilyKey || undefined,
+    });
 
-      try {
-        console.log();
-        console.log(chalk.bold.white("  ── Model ──────────────────────────────────"));
-        console.log();
-        console.log(
-          "  " + chalk.cyan("1") + chalk.dim(" llama3.3-70b") + chalk.white(" (recommended)")
-        );
-        console.log("  " + chalk.cyan("2") + chalk.dim(" llama3.1-8b") + chalk.white(" (faster)"));
-        console.log("  " + chalk.cyan("3") + chalk.dim(" custom model name"));
-        console.log();
+  // ── Ollama ────────────────────────────────────────────────────────────────
+  } else {
+    console.log(chalk.bold.white("  ── Ollama ──────────────────────────────────"));
+    console.log();
 
-        const modelChoice = await prompt(
-          rl2,
-          chalk.dim("  Select model [1]: ")
-        );
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const defaultUrl = config.ollamaBaseUrl || "http://localhost:11434";
+    const ollamaUrl = await prompt(rl, chalk.dim(`  Ollama URL [${defaultUrl}]: `));
+    rl.close();
+    const finalUrl = ollamaUrl || defaultUrl;
 
-        if (modelChoice === "2") model = "llama3.1-8b";
-        else if (modelChoice === "3") {
-          model = await prompt(rl2, chalk.dim("  Model name: "));
-        } else if (modelChoice === "1" || !modelChoice) {
-          model = "llama3.3-70b";
-        }
+    console.log(chalk.dim("  Checking available models…"));
+    const models = await listOllamaModels(finalUrl);
 
-        console.log();
-        console.log(chalk.bold.white("  ── Tavily Web Search ───────────────────────"));
-        console.log();
-        console.log(
-          chalk.dim("  Get your API key at: ") +
-            chalk.cyan("https://app.tavily.com")
-        );
-        console.log(
-          chalk.dim("  (Optional — skip to disable web search)")
-        );
-        console.log();
-      } finally {
+    let model = config.ollamaModel;
+
+    if (models.length === 0) {
+      console.log(chalk.yellow("  ⚠ No models found — Ollama may not be running."));
+      console.log(chalk.dim("  The model will be pulled automatically on first use."));
+      console.log();
+
+      const knownModels = [
+        "llama3.2:1b   (~1 GB, fast)",
+        "llama3.1      (~4.7 GB)",
+        "mistral       (~4 GB)",
+        "codellama     (~4 GB, code-focused)",
+        "custom model name…",
+      ];
+      console.log(chalk.bold.white("  ── Model ──────────────────────────────────"));
+      const modelIdx = await promptSelect("Select model", knownModels, 0);
+
+      if (modelIdx === 0) model = "llama3.2:1b";
+      else if (modelIdx === 1) model = "llama3.1";
+      else if (modelIdx === 2) model = "mistral";
+      else if (modelIdx === 3) model = "codellama";
+      else {
+        const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+        model = await prompt(rl2, chalk.dim("  Model name: "));
         rl2.close();
       }
-
-      tavilyKey = await promptHidden(
-        chalk.dim("  Tavily API key") +
-          chalk.dim(config.tavilyApiKey ? " [keep existing]: " : " (optional): ")
-      );
-      const finalTavilyKey = tavilyKey || config.tavilyApiKey || "";
-
-      saveConfig({
-        provider: "cerebras",
-        cerebrasApiKey: finalKey,
-        cerebrasModel: model,
-        tavilyApiKey: finalTavilyKey || undefined,
-      });
-
-      console.log();
-      console.log(chalk.green("  ✓ Configuration saved to: ") + chalk.dim(getConfigPath()));
-      console.log();
-      console.log(
-        chalk.white("  Ready! Start coding with: ") + chalk.cyan("nexus")
-      );
-      console.log();
     } else {
-      console.log(chalk.bold.white("  ── Ollama ──────────────────────────────────"));
-      console.log();
+      const modelItems = [
+        ...models.slice(0, 15),
+        ...(models.length > 15 ? [`… and ${models.length - 15} more (type name below)`] : []),
+        "custom model name…",
+      ];
+      const currentIdx = Math.max(0, models.indexOf(config.ollamaModel));
 
-      const defaultUrl = config.ollamaBaseUrl || "http://localhost:11434";
-      const ollamaUrl = await prompt(
-        rl,
-        chalk.dim(`  Ollama URL [${defaultUrl}]: `)
-      );
-      const finalUrl = ollamaUrl || defaultUrl;
+      console.log(chalk.bold.white("  ── Model ──────────────────────────────────"));
+      const modelIdx = await promptSelect("Select model", modelItems, currentIdx);
 
-      console.log(chalk.dim("  Checking available models…"));
-      const models = await listOllamaModels(finalUrl);
-
-      let model = config.ollamaModel;
-
-      if (models.length === 0) {
-        console.log(
-          chalk.yellow("  ⚠ No models found. Make sure Ollama is running.")
-        );
-        console.log(
-          chalk.dim(
-            "  Install a model with: ollama pull llama3.1"
-          )
-        );
-        const customModel = await prompt(
-          rl,
-          chalk.dim(`  Model name [${model}]: `)
-        );
-        model = customModel || model;
+      if (modelIdx < models.length) {
+        model = models[modelIdx];
       } else {
-        console.log(
-          chalk.dim(`  Found ${models.length} model(s):`)
-        );
-        models.slice(0, 10).forEach((m, i) => {
-          console.log(
-            "  " + chalk.cyan(String(i + 1)) + " " + chalk.white(m)
-          );
-        });
-        if (models.length > 10) {
-          console.log(chalk.dim(`  … and ${models.length - 10} more`));
-        }
-        console.log();
-        const choice = await prompt(
-          rl,
-          chalk.dim(`  Select model number or type name [${model}]: `)
-        );
-        if (choice) {
-          const idx = parseInt(choice, 10) - 1;
-          if (!isNaN(idx) && models[idx]) {
-            model = models[idx];
-          } else {
-            model = choice;
-          }
-        }
+        const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+        model = await prompt(rl2, chalk.dim("  Model name: "));
+        rl2.close();
       }
-
-      console.log();
-      console.log(chalk.bold.white("  ── Tavily Web Search ───────────────────────"));
-      console.log();
-      console.log(
-        chalk.dim("  Get your API key at: ") +
-          chalk.cyan("https://app.tavily.com")
-      );
-      console.log(chalk.dim("  (Optional — skip to disable web search)"));
-      console.log();
-
-      rl.close();
-
-      const tavilyKey = await promptHidden(
-        chalk.dim("  Tavily API key") +
-          chalk.dim(config.tavilyApiKey ? " [keep existing]: " : " (optional): ")
-      );
-      const finalTavilyKey = tavilyKey || config.tavilyApiKey || "";
-
-      saveConfig({
-        provider: "ollama",
-        ollamaBaseUrl: finalUrl,
-        ollamaModel: model,
-        tavilyApiKey: finalTavilyKey || undefined,
-      });
-
-      console.log();
-      console.log(chalk.green("  ✓ Configuration saved to: ") + chalk.dim(getConfigPath()));
-      console.log();
-      console.log(
-        chalk.white("  Ready! Start coding with: ") + chalk.cyan("nexus")
-      );
-      console.log();
     }
-  } catch (err) {
-    try {
-      rl.close();
-    } catch {}
-    throw err;
+
+    // Tavily
+    console.log();
+    console.log(chalk.bold.white("  ── Tavily Web Search (optional) ────────────"));
+    console.log();
+    console.log(chalk.dim("  Get your API key at: ") + chalk.cyan("https://app.tavily.com"));
+    console.log();
+
+    const tavilyKey = await promptHidden(
+      chalk.dim("  Tavily API key") +
+        chalk.dim(config.tavilyApiKey ? " [keep existing]: " : " (optional): ")
+    );
+    const finalTavilyKey = tavilyKey || config.tavilyApiKey || "";
+
+    saveConfig({
+      provider: "ollama",
+      ollamaBaseUrl: finalUrl,
+      ollamaModel: model,
+      tavilyApiKey: finalTavilyKey || undefined,
+    });
   }
+
+  console.log();
+  console.log(chalk.green("  ✓ Configuration saved to: ") + chalk.dim(getConfigPath()));
+  console.log();
+  console.log(chalk.white("  Ready! Start coding with: ") + chalk.cyan("nexus"));
+  console.log();
 }
