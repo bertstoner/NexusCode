@@ -36,6 +36,10 @@ else
 fi
 WRAPPER="${INSTALL_DIR}/nexus"
 
+# Resolve the real user's home directory even when running under sudo
+REAL_USER="${SUDO_USER:-${USER}}"
+REAL_HOME="$(getent passwd "${REAL_USER}" 2>/dev/null | cut -d: -f6 || echo "${HOME}")"
+
 echo ""
 echo "  Installing nexus CLI..."
 echo ""
@@ -331,42 +335,43 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
 
   # ── API key prompts ──────────────────────────────────────────────────────────
 
-  # Read a secret character-by-character, printing * for each keystroke
+  # Read a secret character-by-character, printing * per keystroke.
+  # All display goes to /dev/tty so it works inside subshells and under sudo.
+  # Result is stored in global REPLY (never captured via $(...)).
   read_secret() {
-    local input="" char
-    if [ ! -t 0 ]; then echo ""; return; fi
+    REPLY=""
+    local char
+    local tty=/dev/tty
+    [ -e "${tty}" ] || { IFS= read -r REPLY; return; }
     stty -echo -icanon min 1 time 0 2>/dev/null || true
     while IFS= read -r -n1 char 2>/dev/null; do
       case "${char}" in
         $'\0'|$'\n'|$'\r') break ;;
         $'\177'|$'\b')
-          if [ ${#input} -gt 0 ]; then
-            input="${input%?}"
-            printf '\b \b'
+          if [ ${#REPLY} -gt 0 ]; then
+            REPLY="${REPLY%?}"
+            printf '\b \b' > "${tty}"
           fi
           ;;
-        *) input="${input}${char}"; printf '*' ;;
+        *) REPLY="${REPLY}${char}"; printf '*' > "${tty}" ;;
       esac
     done
     stty echo icanon 2>/dev/null || true
-    printf '\n'
-    printf '%s' "${input}"
+    printf '\n' > "${tty}"
   }
 
-  # Prompt for a secret, write result to .env and return value in REPLY
+  # Prompt for a secret key, write to .env, set REPLY.
   prompt_secret() {
-    local label="$1" var="$2" existing value
+    local label="$1" var="$2" existing
     existing="$(grep "^${var}=" .env 2>/dev/null | cut -d'=' -f2-)"
     if [ -n "${existing}" ]; then
-      printf "  %s [keep existing]: " "${label}"
+      printf "  %s [keep existing]: " "${label}" > /dev/tty
     else
-      printf "  %s (optional — press Enter to skip): " "${label}"
+      printf "  %s (optional — press Enter to skip): " "${label}" > /dev/tty
     fi
-    value="$(read_secret)"
-    REPLY="${value:-${existing}}"
+    read_secret                          # sets REPLY
+    REPLY="${REPLY:-${existing}}"
     if [ -n "${REPLY}" ]; then
-      # Filter out the existing line and append the new value safely
-      # (avoids sed delimiter conflicts with keys containing / | & etc.)
       grep -v "^${var}=" .env > /tmp/.env.nexus.tmp && mv /tmp/.env.nexus.tmp .env
       printf '%s=%s\n' "${var}" "${REPLY}" >> .env
     fi
@@ -425,7 +430,7 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
     fi
 
     # Sync nexus CLI config — model + API keys — from .env
-    NEXUS_CONFIG="${HOME}/.config/nexus/config.json"
+    NEXUS_CONFIG="${REAL_HOME}/.config/nexus/config.json"
     mkdir -p "$(dirname "${NEXUS_CONFIG}")"
     # Read current keys from .env in case they were set on a previous run
     CEREBRAS_KEY="${CEREBRAS_KEY:-$(grep "^CEREBRAS_API_KEY=" .env 2>/dev/null | cut -d'=' -f2-)}"
