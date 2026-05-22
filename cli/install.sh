@@ -304,16 +304,55 @@ ollama_pull_progress() {
 }
 
 if [ "${SKIP_CONTAINERS}" != "1" ]; then
-  echo "  Starting Ollama + Open WebUI containers..."
   cd "${WORKSPACE_ROOT_EARLY}"
 
   # Create .env from .env.example if it doesn't exist
   if [ ! -f .env ]; then
     cp .env.example .env
-    echo "  Created .env from .env.example"
   fi
 
-  # Bring up just the cli profile (Ollama + Open WebUI) in detached mode
+  # ── API key prompts ──────────────────────────────────────────────────────────
+
+  prompt_secret() {
+    # Usage: prompt_secret "Label" ENV_VAR_NAME
+    local label="$1" var="$2" existing value input
+    existing="$(grep "^${var}=" .env 2>/dev/null | cut -d'=' -f2-)"
+    if [ -n "${existing}" ]; then
+      printf "  %s [keep existing]: " "${label}"
+    else
+      printf "  %s (optional — press Enter to skip): " "${label}"
+    fi
+    if [ -t 0 ]; then
+      stty -echo 2>/dev/null || true
+      IFS= read -r input || true
+      stty echo 2>/dev/null || true
+      printf "\n"
+    else
+      input=""
+    fi
+    value="${input:-${existing}}"
+    if [ -n "${value}" ]; then
+      sed -i "s|^${var}=.*|${var}=${value}|" .env
+    fi
+  }
+
+  echo ""
+  echo "  ── API Keys (used by nexus CLI and Open WebUI) ────────────────────"
+  echo ""
+  echo "  Cerebras AI gives fast cloud inference as an alternative to Ollama."
+  echo "  Get a free key at: https://cloud.cerebras.ai"
+  echo ""
+  prompt_secret "Cerebras API key" "CEREBRAS_API_KEY"
+  echo ""
+  echo "  Tavily enables web search inside both the CLI and Open WebUI."
+  echo "  Get a free key at: https://app.tavily.com"
+  echo ""
+  prompt_secret "Tavily API key  " "TAVILY_API_KEY"
+  echo ""
+
+  # ── Start containers ─────────────────────────────────────────────────────────
+
+  echo "  Starting Ollama + Open WebUI containers..."
   ${COMPOSE_CMD} --profile cli up -d ollama open-webui
 
   # Wait up to 120 s for Ollama API to be ready
