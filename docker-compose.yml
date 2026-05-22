@@ -78,6 +78,22 @@ services:
     profiles:
       - cli
 
+  # ── Open WebUI ──────────────────────────────────────────────────────────────
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      WEBUI_AUTH: "false"
+    ports:
+      - "${WEBUI_PORT:-3000}:8080"
+    volumes:
+      - open_webui_data:/app/backend/data
+    depends_on:
+      - ollama
+    restart: unless-stopped
+    profiles:
+      - cli
+
   # ── code-ai CLI ─────────────────────────────────────────────────────────────
   # Run with: docker compose run --rm code-ai
   code-ai:
@@ -103,4 +119,5 @@ services:
 volumes:
   postgres_data:
   ollama_data:
+  open_webui_data:
   code_ai_config:
