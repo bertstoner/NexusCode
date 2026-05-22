@@ -84,6 +84,9 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_BASE_URLS: http://ollama:11434
       WEBUI_AUTH: "false"
+      # Cerebras as an OpenAI-compatible provider (only active if key is set)
+      OPENAI_API_BASE_URL: https://api.cerebras.ai/v1
+      OPENAI_API_KEY: ${CEREBRAS_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
