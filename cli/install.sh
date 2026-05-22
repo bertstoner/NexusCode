@@ -157,6 +157,51 @@ echo "  pnpm v$(pnpm --version) OK"
 echo ""
 
 # ---------------------------------------------------------------------------
+# NVIDIA Container Toolkit  (GPU passthrough for Ollama)
+# ---------------------------------------------------------------------------
+
+NVIDIA_TOOLKIT_INSTALLED=0
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+  echo "  NVIDIA GPU detected — ensuring nvidia-container-toolkit is installed..."
+
+  if ! command -v nvidia-ctk >/dev/null 2>&1; then
+    case "${PKG_MGR}" in
+      apt)
+        # Official NVIDIA repo for Debian/Ubuntu
+        KEYRING="/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
+        curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+          | maybe_sudo gpg --dearmor -o "${KEYRING}"
+        curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+          | sed "s#deb https://#deb [signed-by=${KEYRING}] https://#g" \
+          | maybe_sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null
+        maybe_sudo apt-get update -qq
+        maybe_sudo apt-get install -y nvidia-container-toolkit
+        ;;
+      dnf|yum)
+        curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
+          | maybe_sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo >/dev/null
+        maybe_sudo "${PKG_MGR}" install -y nvidia-container-toolkit
+        ;;
+      *)
+        echo "  WARNING: Cannot auto-install nvidia-container-toolkit on this distro."
+        echo "           Install manually: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
+        ;;
+    esac
+  fi
+
+  if command -v nvidia-ctk >/dev/null 2>&1; then
+    # Configure Docker runtime and restart so --gpus flags work
+    maybe_sudo nvidia-ctk runtime configure --runtime=docker 2>/dev/null
+    NVIDIA_TOOLKIT_INSTALLED=1
+    echo "  nvidia-container-toolkit OK — GPU will be available in containers"
+  fi
+else
+  echo "  No NVIDIA GPU detected — skipping nvidia-container-toolkit"
+fi
+echo ""
+
+# ---------------------------------------------------------------------------
 # Docker  (used for Ollama + Open WebUI containers)
 # ---------------------------------------------------------------------------
 
@@ -182,20 +227,20 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-# Ensure Docker daemon is running
-if ! docker info >/dev/null 2>&1; then
-  echo "  Starting Docker daemon..."
+# Ensure Docker daemon is running (restart if nvidia-ctk just configured it)
+if [ "${NVIDIA_TOOLKIT_INSTALLED}" = "1" ] || ! docker info >/dev/null 2>&1; then
   if command -v systemctl >/dev/null 2>&1; then
-    maybe_sudo systemctl enable --now docker
+    maybe_sudo systemctl restart docker
   else
-    maybe_sudo service docker start 2>/dev/null || true
+    maybe_sudo service docker restart 2>/dev/null || true
   fi
   sleep 3
-  if ! docker info >/dev/null 2>&1; then
-    echo "  WARNING: Docker daemon not responding — you may need to start it manually."
-    echo "           Skipping container setup."
-    SKIP_CONTAINERS=1
-  fi
+fi
+
+if ! docker info >/dev/null 2>&1; then
+  echo "  WARNING: Docker daemon not responding — you may need to start it manually."
+  echo "           Skipping container setup."
+  SKIP_CONTAINERS=1
 fi
 
 echo "  Docker $(docker --version | awk '{print $3}' | tr -d ',') OK"
@@ -299,6 +344,15 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
       echo "  Pulling ${DEFAULT_MODEL}..."
       ollama_pull_progress "${DEFAULT_MODEL}"
       echo "  ${DEFAULT_MODEL} ready"
+    fi
+    # Verify GPU is visible inside the Ollama container
+    OLLAMA_CONTAINER="$(${COMPOSE_CMD} --profile cli ps -q ollama 2>/dev/null | head -1)"
+    if [ -n "${OLLAMA_CONTAINER}" ] && docker exec "${OLLAMA_CONTAINER}" nvidia-smi >/dev/null 2>&1; then
+      GPU_NAME="$(docker exec "${OLLAMA_CONTAINER}" nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
+      echo "  GPU in container: ${GPU_NAME:-detected}"
+    elif command -v nvidia-smi >/dev/null 2>&1; then
+      echo "  WARNING: NVIDIA GPU present on host but not visible in Ollama container."
+      echo "           Ensure nvidia-container-toolkit is installed and Docker was restarted."
     fi
     echo "  Ollama OK  →  http://localhost:11434"
     echo "  Open WebUI →  http://localhost:3000  (also accessible from other machines)"
