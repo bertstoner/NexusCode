@@ -83,7 +83,10 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_BASE_URLS: http://ollama:11434
       WEBUI_AUTH: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${WEBUI_PORT:-3000}:8080"
     volumes:
