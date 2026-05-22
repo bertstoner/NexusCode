@@ -120,6 +120,20 @@ export async function runRepl(): Promise<void> {
 
 const MAX_HISTORY_MESSAGES = 40;
 
+const REQUIRED_TOOL_PARAMS: Record<string, string[]> = {
+  bash:           ["command"],
+  read_file:      ["path"],
+  write_file:     ["path", "content"],
+  edit_file:      ["path", "old_string", "new_string"],
+  glob:           ["pattern"],
+  web_search:     ["query"],
+};
+
+function isToolCallValid(name: string, args: Record<string, unknown>): boolean {
+  const required = REQUIRED_TOOL_PARAMS[name] ?? [];
+  return required.every((key) => args[key] !== undefined && args[key] !== null && args[key] !== "");
+}
+
 function trimHistory(history: Message[]): Message[] {
   if (history.length <= MAX_HISTORY_MESSAGES) return history;
   const trimmed = history.slice(history.length - MAX_HISTORY_MESSAGES);
@@ -201,9 +215,20 @@ async function processMessage(
 
     isFirst = false;
 
-    if (pendingToolCalls.length === 0) {
+    // Drop tool calls with missing required parameters — the model already
+    // produced text, so just treat the response as text-only and finish.
+    const validToolCalls = pendingToolCalls.filter((tc) => {
+      let args: Record<string, unknown> = {};
+      try { args = JSON.parse(tc.function.arguments); } catch { /* empty args */ }
+      return isToolCallValid(tc.function.name, args);
+    });
+
+    if (validToolCalls.length === 0) {
       if (assistantContent) {
         history.push({ role: "assistant", content: assistantContent });
+      }
+      if (validToolCalls.length < pendingToolCalls.length) {
+        renderAssistantEnd();
       }
       break;
     }
@@ -211,12 +236,12 @@ async function processMessage(
     const assistantMsg: Message = {
       role: "assistant",
       content: assistantContent || "",
-      tool_calls: pendingToolCalls,
+      tool_calls: validToolCalls,
     };
     history.push(assistantMsg);
     assistantContent = "";
 
-    for (const toolCall of pendingToolCalls) {
+    for (const toolCall of validToolCalls) {
       if (abort.signal.aborted) break;
 
       let toolInput: Record<string, unknown> = {};
