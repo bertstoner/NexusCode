@@ -124,16 +124,16 @@ else
   fi
 fi
 
-# Version check — upgrade if < 20
+# Version check — upgrade if < 22 (pnpm 11 requires Node.js >= 22.13)
 NODE_MAJOR="$("${NODE_BIN}" -e 'process.stdout.write(String(process.versions.node.split(".")[0]))')"
-if [ "${NODE_MAJOR}" -lt 20 ]; then
-  echo "  Node.js $("${NODE_BIN}" --version) is too old (need >= 20) — upgrading..."
+if [ "${NODE_MAJOR}" -lt 22 ]; then
+  echo "  Node.js $("${NODE_BIN}" --version) is too old (need >= 22) — upgrading..."
   install_node
   if   command -v node   >/dev/null 2>&1; then NODE_BIN="node"
   elif command -v nodejs >/dev/null 2>&1; then NODE_BIN="nodejs"
   fi
   NODE_MAJOR="$("${NODE_BIN}" -e 'process.stdout.write(String(process.versions.node.split(".")[0]))')"
-  if [ "${NODE_MAJOR}" -lt 20 ]; then
+  if [ "${NODE_MAJOR}" -lt 22 ]; then
     echo "  ERROR: Upgrade failed. Install Node.js 22+ manually: https://nodejs.org/en/download"
     exit 1
   fi
