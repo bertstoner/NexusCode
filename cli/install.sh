@@ -313,26 +313,41 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
 
   # ── API key prompts ──────────────────────────────────────────────────────────
 
+  # Read a secret character-by-character, printing * for each keystroke
+  read_secret() {
+    local input="" char
+    if [ ! -t 0 ]; then echo ""; return; fi
+    stty -echo -icanon min 1 time 0 2>/dev/null || true
+    while IFS= read -r -n1 char 2>/dev/null; do
+      case "${char}" in
+        $'\0'|$'\n'|$'\r') break ;;
+        $'\177'|$'\b')
+          if [ ${#input} -gt 0 ]; then
+            input="${input%?}"
+            printf '\b \b'
+          fi
+          ;;
+        *) input="${input}${char}"; printf '*' ;;
+      esac
+    done
+    stty echo icanon 2>/dev/null || true
+    printf '\n'
+    printf '%s' "${input}"
+  }
+
+  # Prompt for a secret, write result to .env and return value in REPLY
   prompt_secret() {
-    # Usage: prompt_secret "Label" ENV_VAR_NAME
-    local label="$1" var="$2" existing value input
+    local label="$1" var="$2" existing value
     existing="$(grep "^${var}=" .env 2>/dev/null | cut -d'=' -f2-)"
     if [ -n "${existing}" ]; then
       printf "  %s [keep existing]: " "${label}"
     else
       printf "  %s (optional — press Enter to skip): " "${label}"
     fi
-    if [ -t 0 ]; then
-      stty -echo 2>/dev/null || true
-      IFS= read -r input || true
-      stty echo 2>/dev/null || true
-      printf "\n"
-    else
-      input=""
-    fi
-    value="${input:-${existing}}"
-    if [ -n "${value}" ]; then
-      sed -i "s|^${var}=.*|${var}=${value}|" .env
+    value="$(read_secret)"
+    REPLY="${value:-${existing}}"
+    if [ -n "${REPLY}" ]; then
+      sed -i "s|^${var}=.*|${var}=${REPLY}|" .env
     fi
   }
 
@@ -343,11 +358,13 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
   echo "  Get a free key at: https://cloud.cerebras.ai"
   echo ""
   prompt_secret "Cerebras API key" "CEREBRAS_API_KEY"
+  CEREBRAS_KEY="${REPLY}"
   echo ""
   echo "  Tavily enables web search inside both the CLI and Open WebUI."
   echo "  Get a free key at: https://app.tavily.com"
   echo ""
   prompt_secret "Tavily API key  " "TAVILY_API_KEY"
+  TAVILY_KEY="${REPLY}"
   echo ""
 
   # ── Start containers ─────────────────────────────────────────────────────────
@@ -386,34 +403,27 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
       echo "  ${DEFAULT_MODEL} ready"
     fi
 
-    # Sync nexus CLI config to match the model in .env
+    # Sync nexus CLI config — model + API keys — from .env
     NEXUS_CONFIG="${HOME}/.config/nexus/config.json"
     mkdir -p "$(dirname "${NEXUS_CONFIG}")"
-    if [ -f "${NEXUS_CONFIG}" ]; then
-      # Update ollamaModel in existing config using node (already installed)
-      node -e "
-        const fs = require('fs');
-        const cfg = JSON.parse(fs.readFileSync('${NEXUS_CONFIG}', 'utf8'));
-        cfg.ollamaModel = '${DEFAULT_MODEL}';
-        cfg.provider = cfg.provider || 'ollama';
-        cfg.ollamaBaseUrl = cfg.ollamaBaseUrl || 'http://localhost:11434';
-        fs.writeFileSync('${NEXUS_CONFIG}', JSON.stringify(cfg, null, 2));
-      " 2>/dev/null && echo "  nexus CLI synced to model: ${DEFAULT_MODEL}"
-    else
-      # Write a fresh config
-      node -e "
-        const fs = require('fs');
-        fs.mkdirSync('$(dirname "${NEXUS_CONFIG}")', { recursive: true });
-        fs.writeFileSync('${NEXUS_CONFIG}', JSON.stringify({
-          provider: 'ollama',
-          ollamaBaseUrl: 'http://localhost:11434',
-          ollamaModel: '${DEFAULT_MODEL}',
-          cerebrasModel: 'llama3.3-70b',
-          maxTokens: 8192,
-          temperature: 0.2
-        }, null, 2));
-      " 2>/dev/null && echo "  nexus CLI configured with model: ${DEFAULT_MODEL}"
-    fi
+    # Read current keys from .env in case they were set on a previous run
+    CEREBRAS_KEY="${CEREBRAS_KEY:-$(grep "^CEREBRAS_API_KEY=" .env 2>/dev/null | cut -d'=' -f2-)}"
+    TAVILY_KEY="${TAVILY_KEY:-$(grep "^TAVILY_API_KEY=" .env 2>/dev/null | cut -d'=' -f2-)}"
+    node -e "
+      const fs = require('fs');
+      let cfg = {};
+      try { cfg = JSON.parse(fs.readFileSync('${NEXUS_CONFIG}', 'utf8')); } catch {}
+      cfg.provider        = cfg.provider || 'ollama';
+      cfg.ollamaBaseUrl   = cfg.ollamaBaseUrl || 'http://localhost:11434';
+      cfg.ollamaModel     = '${DEFAULT_MODEL}';
+      cfg.cerebrasModel   = cfg.cerebrasModel || 'llama3.3-70b';
+      cfg.maxTokens       = cfg.maxTokens || 8192;
+      cfg.temperature     = cfg.temperature || 0.2;
+      if ('${CEREBRAS_KEY}') cfg.cerebrasApiKey = '${CEREBRAS_KEY}';
+      if ('${TAVILY_KEY}')   cfg.tavilyApiKey   = '${TAVILY_KEY}';
+      fs.mkdirSync(require('path').dirname('${NEXUS_CONFIG}'), { recursive: true });
+      fs.writeFileSync('${NEXUS_CONFIG}', JSON.stringify(cfg, null, 2));
+    " 2>/dev/null && echo "  nexus CLI config synced (model: ${DEFAULT_MODEL})"
     # Verify GPU is visible inside the Ollama container
     OLLAMA_CONTAINER="$(${COMPOSE_CMD} --profile cli ps -q ollama 2>/dev/null | head -1)"
     if [ -n "${OLLAMA_CONTAINER}" ] && docker exec "${OLLAMA_CONTAINER}" nvidia-smi >/dev/null 2>&1; then
