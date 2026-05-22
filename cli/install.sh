@@ -378,11 +378,41 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
     echo "           Check logs with: docker compose --profile cli logs ollama"
   else
     # Pull default model if not already present
-    DEFAULT_MODEL="llama3.1"
+    DEFAULT_MODEL="$(grep "^OLLAMA_MODEL=" .env 2>/dev/null | cut -d'=' -f2-)"
+    DEFAULT_MODEL="${DEFAULT_MODEL:-llama3.1}"
     if ! curl -sf http://localhost:11434/api/tags | grep -q "${DEFAULT_MODEL}" 2>/dev/null; then
       echo "  Pulling ${DEFAULT_MODEL}..."
       ollama_pull_progress "${DEFAULT_MODEL}"
       echo "  ${DEFAULT_MODEL} ready"
+    fi
+
+    # Sync nexus CLI config to match the model in .env
+    NEXUS_CONFIG="${HOME}/.config/nexus/config.json"
+    mkdir -p "$(dirname "${NEXUS_CONFIG}")"
+    if [ -f "${NEXUS_CONFIG}" ]; then
+      # Update ollamaModel in existing config using node (already installed)
+      node -e "
+        const fs = require('fs');
+        const cfg = JSON.parse(fs.readFileSync('${NEXUS_CONFIG}', 'utf8'));
+        cfg.ollamaModel = '${DEFAULT_MODEL}';
+        cfg.provider = cfg.provider || 'ollama';
+        cfg.ollamaBaseUrl = cfg.ollamaBaseUrl || 'http://localhost:11434';
+        fs.writeFileSync('${NEXUS_CONFIG}', JSON.stringify(cfg, null, 2));
+      " 2>/dev/null && echo "  nexus CLI synced to model: ${DEFAULT_MODEL}"
+    else
+      # Write a fresh config
+      node -e "
+        const fs = require('fs');
+        fs.mkdirSync('$(dirname "${NEXUS_CONFIG}")', { recursive: true });
+        fs.writeFileSync('${NEXUS_CONFIG}', JSON.stringify({
+          provider: 'ollama',
+          ollamaBaseUrl: 'http://localhost:11434',
+          ollamaModel: '${DEFAULT_MODEL}',
+          cerebrasModel: 'llama3.3-70b',
+          maxTokens: 8192,
+          temperature: 0.2
+        }, null, 2));
+      " 2>/dev/null && echo "  nexus CLI configured with model: ${DEFAULT_MODEL}"
     fi
     # Verify GPU is visible inside the Ollama container
     OLLAMA_CONTAINER="$(${COMPOSE_CMD} --profile cli ps -q ollama 2>/dev/null | head -1)"
