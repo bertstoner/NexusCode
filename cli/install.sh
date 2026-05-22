@@ -347,7 +347,10 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
     value="$(read_secret)"
     REPLY="${value:-${existing}}"
     if [ -n "${REPLY}" ]; then
-      sed -i "s|^${var}=.*|${var}=${REPLY}|" .env
+      # Filter out the existing line and append the new value safely
+      # (avoids sed delimiter conflicts with keys containing / | & etc.)
+      grep -v "^${var}=" .env > /tmp/.env.nexus.tmp && mv /tmp/.env.nexus.tmp .env
+      printf '%s=%s\n' "${var}" "${REPLY}" >> .env
     fi
   }
 
