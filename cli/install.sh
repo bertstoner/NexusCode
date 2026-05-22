@@ -243,9 +243,9 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
   # Bring up just the cli profile (Ollama + Open WebUI) in detached mode
   ${COMPOSE_CMD} --profile cli up -d ollama open-webui
 
-  # Wait up to 60 s for Ollama API to be ready
+  # Wait up to 120 s for Ollama API to be ready
   echo "  Waiting for Ollama to be ready..."
-  for i in $(seq 1 60); do
+  for i in $(seq 1 120); do
     if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
       break
     fi
