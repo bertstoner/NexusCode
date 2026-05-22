@@ -332,6 +332,16 @@ async function handleCommand(
             ? chalk.green("✓ Tavily configured")
             : chalk.dim("✗ not configured"))
       );
+      // Open WebUI check (derive port from Ollama base URL host, default 3000)
+      const webuiHost = config.ollamaBaseUrl.replace(/:\d+$/, "").replace(/^http/, "http");
+      const webuiUrl = `${webuiHost}:3000`;
+      process.stdout.write("  " + chalk.dim("WebUI:     ") + chalk.white(webuiUrl) + "  ");
+      try {
+        const res = await fetch(webuiUrl, { signal: AbortSignal.timeout(3000) });
+        process.stdout.write(res.ok ? chalk.green("✓ reachable\n") : chalk.red(`✗ HTTP ${res.status}\n`));
+      } catch {
+        process.stdout.write(chalk.red("✗ not reachable\n"));
+      }
       console.log(
         "  " +
           chalk.dim("CWD:       ") +
