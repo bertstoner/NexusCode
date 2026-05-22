@@ -230,6 +230,34 @@ echo ""
 # Ollama + Open WebUI containers
 # ---------------------------------------------------------------------------
 
+ollama_pull_progress() {
+  local model="$1"
+  local last_status=""
+  # Stream the pull API and render a progress bar from completed/total fields
+  curl -sN -X POST http://localhost:11434/api/pull \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"${model}\"}" | \
+  while IFS= read -r line; do
+    local status completed total pct filled empty filled_str empty_str
+    status=$(printf '%s' "$line"   | grep -o '"status":"[^"]*"' | sed 's/"status":"//;s/"//')
+    completed=$(printf '%s' "$line" | grep -o '"completed":[0-9]*' | grep -o '[0-9]*$')
+    total=$(printf '%s' "$line"     | grep -o '"total":[0-9]*'     | grep -o '[0-9]*$')
+
+    if [ -n "$total" ] && [ "$total" -gt 0 ] && [ -n "$completed" ]; then
+      pct=$((completed * 100 / total))
+      filled=$((pct / 2))
+      empty=$((50 - filled))
+      filled_str=$(printf '%*s' "$filled" '' | tr ' ' '#')
+      empty_str=$(printf '%*s'  "$empty"  '' | tr ' ' '-')
+      printf "\r  [%s%s] %3d%%  %s" "$filled_str" "$empty_str" "$pct" "$status"
+    elif [ -n "$status" ] && [ "$status" != "$last_status" ]; then
+      printf "\r  %-72s" "$status"
+      last_status="$status"
+    fi
+  done
+  printf "\n"
+}
+
 if [ "${SKIP_CONTAINERS}" != "1" ]; then
   echo "  Starting Ollama + Open WebUI containers..."
   cd "${WORKSPACE_ROOT_EARLY}"
@@ -244,28 +272,32 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
   ${COMPOSE_CMD} --profile cli up -d ollama open-webui
 
   # Wait up to 120 s for Ollama API to be ready
-  echo "  Waiting for Ollama to be ready..."
+  printf "  Waiting for Ollama to be ready..."
+  OLLAMA_READY=0
   for i in $(seq 1 120); do
     if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+      OLLAMA_READY=1
       break
     fi
     sleep 1
-    printf "."
+    case $((i % 4)) in
+      0) printf "\r  Waiting for Ollama to be ready... |" ;;
+      1) printf "\r  Waiting for Ollama to be ready... /" ;;
+      2) printf "\r  Waiting for Ollama to be ready... -" ;;
+      3) printf "\r  Waiting for Ollama to be ready... \\" ;;
+    esac
   done
-  echo ""
+  printf "\r  %-50s\n" "  Waiting for Ollama to be ready... done"
 
-  if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+  if [ "${OLLAMA_READY}" != "1" ]; then
     echo "  WARNING: Ollama did not become ready in time."
     echo "           Check logs with: docker compose --profile cli logs ollama"
   else
     # Pull default model if not already present
     DEFAULT_MODEL="llama3.1"
     if ! curl -sf http://localhost:11434/api/tags | grep -q "${DEFAULT_MODEL}" 2>/dev/null; then
-      echo "  Pulling ${DEFAULT_MODEL} (this may take a while)..."
-      docker exec "$(${COMPOSE_CMD} ps -q ollama 2>/dev/null | head -1)" \
-        ollama pull "${DEFAULT_MODEL}" 2>/dev/null || \
-        curl -sf -X POST http://localhost:11434/api/pull \
-          -d "{\"name\":\"${DEFAULT_MODEL}\"}" >/dev/null
+      echo "  Pulling ${DEFAULT_MODEL}..."
+      ollama_pull_progress "${DEFAULT_MODEL}"
       echo "  ${DEFAULT_MODEL} ready"
     fi
     echo "  Ollama OK  →  http://localhost:11434"
