@@ -157,62 +157,124 @@ echo "  pnpm v$(pnpm --version) OK"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Ollama
+# Docker  (used for Ollama + Open WebUI containers)
 # ---------------------------------------------------------------------------
 
-if ! command -v ollama >/dev/null 2>&1; then
-  echo "  Ollama not found — installing..."
-  curl -fsSL https://ollama.ai/install.sh | sh
-fi
+WORKSPACE_ROOT_EARLY="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-if ! command -v ollama >/dev/null 2>&1; then
-  echo "  ERROR: Ollama installation did not succeed."
-  exit 1
-fi
-echo "  ollama $(ollama --version 2>/dev/null || echo 'OK')"
-
-# Detect Docker / container environment (no systemd init)
-in_container() {
-  [ -f /.dockerenv ] || grep -qa 'docker\|lxc\|containerd' /proc/1/cgroup 2>/dev/null
+install_docker() {
+  echo "  Docker not found — installing..."
+  curl -fsSL https://get.docker.com | maybe_sudo sh
+  # Add current user to docker group so we don't need sudo for every command
+  if [ "$(id -u)" != "0" ]; then
+    maybe_sudo usermod -aG docker "${USER}" 2>/dev/null || true
+    echo "  NOTE: You may need to log out and back in for docker group membership to take effect."
+    echo "        If docker commands fail, run: newgrp docker"
+  fi
 }
 
-# Start Ollama if not already running
-if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
-  echo "  Starting Ollama..."
-  if ! in_container && command -v systemctl >/dev/null 2>&1 && systemctl list-units --type=service 2>/dev/null | grep -q ollama; then
-    maybe_sudo systemctl enable --now ollama
+if ! command -v docker >/dev/null 2>&1; then
+  install_docker
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "  ERROR: Docker installation did not succeed."
+  exit 1
+fi
+
+# Ensure Docker daemon is running
+if ! docker info >/dev/null 2>&1; then
+  echo "  Starting Docker daemon..."
+  if command -v systemctl >/dev/null 2>&1; then
+    maybe_sudo systemctl enable --now docker
   else
-    # Docker / no-systemd: run in background, log to /tmp
-    ollama serve > /tmp/ollama.log 2>&1 &
-    OLLAMA_PID=$!
-    echo "  Ollama started in background (pid ${OLLAMA_PID}, log: /tmp/ollama.log)"
-    # Wait up to 30 s for the API to become ready
-    echo "  Waiting for Ollama API..."
-    for i in $(seq 1 30); do
-      if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
-        break
-      fi
-      if ! kill -0 "${OLLAMA_PID}" 2>/dev/null; then
-        echo "  ERROR: Ollama process exited unexpectedly. Check /tmp/ollama.log"
-        exit 1
-      fi
-      sleep 1
-    done
-    if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
-      echo "  ERROR: Ollama API did not become ready. Check /tmp/ollama.log"
-      exit 1
-    fi
+    maybe_sudo service docker start 2>/dev/null || true
+  fi
+  sleep 3
+  if ! docker info >/dev/null 2>&1; then
+    echo "  WARNING: Docker daemon not responding — you may need to start it manually."
+    echo "           Skipping container setup."
+    SKIP_CONTAINERS=1
   fi
 fi
 
-# Pull default model if not already present
-DEFAULT_MODEL="llama3.1"
-if ! ollama list 2>/dev/null | grep -q "${DEFAULT_MODEL}"; then
-  echo "  Pulling ${DEFAULT_MODEL} (this may take a while)..."
-  ollama pull "${DEFAULT_MODEL}"
+echo "  Docker $(docker --version | awk '{print $3}' | tr -d ',') OK"
+
+# Docker Compose (plugin or standalone)
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE_CMD="docker-compose"
+else
+  echo "  Docker Compose not found — installing plugin..."
+  case "${PKG_MGR}" in
+    apt) maybe_sudo apt-get install -y docker-compose-plugin ;;
+    dnf) maybe_sudo dnf install -y docker-compose-plugin ;;
+    yum) maybe_sudo yum install -y docker-compose-plugin ;;
+    *)
+      COMPOSE_VER="2.27.1"
+      COMPOSE_BIN="/usr/local/lib/docker/cli-plugins/docker-compose"
+      maybe_sudo mkdir -p "$(dirname ${COMPOSE_BIN})"
+      maybe_sudo curl -fsSL \
+        "https://github.com/docker/compose/releases/download/v${COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)" \
+        -o "${COMPOSE_BIN}"
+      maybe_sudo chmod +x "${COMPOSE_BIN}"
+      ;;
+  esac
+  COMPOSE_CMD="docker compose"
 fi
-echo "  Ollama + ${DEFAULT_MODEL} OK"
+echo "  Docker Compose OK"
 echo ""
+
+# ---------------------------------------------------------------------------
+# Ollama + Open WebUI containers
+# ---------------------------------------------------------------------------
+
+if [ "${SKIP_CONTAINERS}" != "1" ]; then
+  echo "  Starting Ollama + Open WebUI containers..."
+  cd "${WORKSPACE_ROOT_EARLY}"
+
+  # Create .env from .env.example if it doesn't exist
+  if [ ! -f .env ]; then
+    cp .env.example .env
+    echo "  Created .env from .env.example"
+  fi
+
+  # Bring up just the cli profile (Ollama + Open WebUI) in detached mode
+  ${COMPOSE_CMD} --profile cli up -d ollama open-webui
+
+  # Wait up to 60 s for Ollama API to be ready
+  echo "  Waiting for Ollama to be ready..."
+  for i in $(seq 1 60); do
+    if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+    printf "."
+  done
+  echo ""
+
+  if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+    echo "  WARNING: Ollama did not become ready in time."
+    echo "           Check logs with: docker compose --profile cli logs ollama"
+  else
+    # Pull default model if not already present
+    DEFAULT_MODEL="llama3.1"
+    if ! curl -sf http://localhost:11434/api/tags | grep -q "${DEFAULT_MODEL}" 2>/dev/null; then
+      echo "  Pulling ${DEFAULT_MODEL} (this may take a while)..."
+      docker exec "$(${COMPOSE_CMD} ps -q ollama 2>/dev/null | head -1)" \
+        ollama pull "${DEFAULT_MODEL}" 2>/dev/null || \
+        curl -sf -X POST http://localhost:11434/api/pull \
+          -d "{\"name\":\"${DEFAULT_MODEL}\"}" >/dev/null
+      echo "  ${DEFAULT_MODEL} ready"
+    fi
+    echo "  Ollama OK  →  http://localhost:11434"
+    echo "  Open WebUI →  http://localhost:3000  (also accessible from other machines)"
+  fi
+
+  cd "${SCRIPT_DIR}"
+  echo ""
+fi
 
 # ---------------------------------------------------------------------------
 # Install dependencies
@@ -220,8 +282,7 @@ echo ""
 
 echo "  Installing dependencies..."
 # Run from workspace root so pnpm resolves the lockfile and workspace correctly
-WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-cd "${WORKSPACE_ROOT}"
+cd "${WORKSPACE_ROOT_EARLY}"
 pnpm install --frozen-lockfile --ignore-scripts
 cd "${SCRIPT_DIR}"
 
