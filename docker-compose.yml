@@ -87,6 +87,10 @@ services:
       # Cerebras as an OpenAI-compatible provider (only active if key is set)
       OPENAI_API_BASE_URL: https://api.cerebras.ai/v1
       OPENAI_API_KEY: ${CEREBRAS_API_KEY:-}
+      # Tavily web search (only active if key is set)
+      ENABLE_RAG_WEB_SEARCH: ${TAVILY_API_KEY:+true}
+      RAG_WEB_SEARCH_ENGINE: tavily
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
