@@ -10,6 +10,24 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT_HOOKS="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# ---------------------------------------------------------------------------
+# Git hooks — auto-chmod install.sh after every pull/checkout
+# ---------------------------------------------------------------------------
+
+install_git_hooks() {
+  local hook_dir="${WORKSPACE_ROOT_HOOKS}/.git/hooks"
+  [ -d "${hook_dir}" ] || return 0
+  for hook in post-merge post-checkout; do
+    cat > "${hook_dir}/${hook}" << 'HOOKEOF'
+#!/bin/sh
+chmod +x "$(git -C "$(dirname "$0")/../.." rev-parse --show-toplevel)/cli/install.sh" 2>/dev/null || true
+HOOKEOF
+    chmod +x "${hook_dir}/${hook}"
+  done
+}
+install_git_hooks
 
 if [ "$(id -u)" = "0" ]; then
   INSTALL_DIR="/usr/local/bin"
@@ -412,21 +430,27 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
     # Read current keys from .env in case they were set on a previous run
     CEREBRAS_KEY="${CEREBRAS_KEY:-$(grep "^CEREBRAS_API_KEY=" .env 2>/dev/null | cut -d'=' -f2-)}"
     TAVILY_KEY="${TAVILY_KEY:-$(grep "^TAVILY_API_KEY=" .env 2>/dev/null | cut -d'=' -f2-)}"
+    # Pass all values as env vars so special characters in keys can't break the script
+    NEXUS_CONFIG="${NEXUS_CONFIG}" \
+    NEXUS_MODEL="${DEFAULT_MODEL}" \
+    NEXUS_CEREBRAS_KEY="${CEREBRAS_KEY}" \
+    NEXUS_TAVILY_KEY="${TAVILY_KEY}" \
     node -e "
       const fs = require('fs');
+      const { NEXUS_CONFIG, NEXUS_MODEL, NEXUS_CEREBRAS_KEY, NEXUS_TAVILY_KEY } = process.env;
       let cfg = {};
-      try { cfg = JSON.parse(fs.readFileSync('${NEXUS_CONFIG}', 'utf8')); } catch {}
-      cfg.provider        = cfg.provider || 'ollama';
-      cfg.ollamaBaseUrl   = cfg.ollamaBaseUrl || 'http://localhost:11434';
-      cfg.ollamaModel     = '${DEFAULT_MODEL}';
-      cfg.cerebrasModel   = cfg.cerebrasModel || 'llama3.3-70b';
-      cfg.maxTokens       = cfg.maxTokens || 8192;
-      cfg.temperature     = cfg.temperature || 0.2;
-      if ('${CEREBRAS_KEY}') cfg.cerebrasApiKey = '${CEREBRAS_KEY}';
-      if ('${TAVILY_KEY}')   cfg.tavilyApiKey   = '${TAVILY_KEY}';
-      fs.mkdirSync(require('path').dirname('${NEXUS_CONFIG}'), { recursive: true });
-      fs.writeFileSync('${NEXUS_CONFIG}', JSON.stringify(cfg, null, 2));
-    " 2>/dev/null && echo "  nexus CLI config synced (model: ${DEFAULT_MODEL})"
+      try { cfg = JSON.parse(fs.readFileSync(NEXUS_CONFIG, 'utf8')); } catch {}
+      cfg.provider      = cfg.provider || 'ollama';
+      cfg.ollamaBaseUrl = cfg.ollamaBaseUrl || 'http://localhost:11434';
+      cfg.ollamaModel   = NEXUS_MODEL;
+      cfg.cerebrasModel = cfg.cerebrasModel || 'llama3.3-70b';
+      cfg.maxTokens     = cfg.maxTokens || 8192;
+      cfg.temperature   = cfg.temperature || 0.2;
+      if (NEXUS_CEREBRAS_KEY) cfg.cerebrasApiKey = NEXUS_CEREBRAS_KEY;
+      if (NEXUS_TAVILY_KEY)   cfg.tavilyApiKey   = NEXUS_TAVILY_KEY;
+      fs.mkdirSync(require('path').dirname(NEXUS_CONFIG), { recursive: true });
+      fs.writeFileSync(NEXUS_CONFIG, JSON.stringify(cfg, null, 2));
+    " && echo "  nexus CLI config synced (model: ${DEFAULT_MODEL})"
     # Verify GPU is visible inside the Ollama container
     OLLAMA_CONTAINER="$(${COMPOSE_CMD} --profile cli ps -q ollama 2>/dev/null | head -1)"
     if [ -n "${OLLAMA_CONTAINER}" ] && docker exec "${OLLAMA_CONTAINER}" nvidia-smi >/dev/null 2>&1; then
