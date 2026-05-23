@@ -457,6 +457,8 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
       fs.mkdirSync(require('path').dirname(NEXUS_CONFIG), { recursive: true });
       fs.writeFileSync(NEXUS_CONFIG, JSON.stringify(cfg, null, 2));
     " && echo "  nexus CLI config synced (model: ${DEFAULT_MODEL})"
+    # Ensure the config dir and file are owned by the real user, not root
+    chown -R "${REAL_USER}:" "${REAL_HOME}/.config/nexus" 2>/dev/null || true
     # Verify GPU is visible inside the Ollama container
     OLLAMA_CONTAINER="$(${COMPOSE_CMD} --profile cli ps -q ollama 2>/dev/null | head -1)"
     if [ -n "${OLLAMA_CONTAINER}" ] && docker exec "${OLLAMA_CONTAINER}" nvidia-smi >/dev/null 2>&1; then
