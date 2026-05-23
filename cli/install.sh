@@ -397,7 +397,7 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
   # ── Start containers ─────────────────────────────────────────────────────────
 
   echo "  Starting Ollama + Open WebUI containers..."
-  ${COMPOSE_CMD} --profile cli up -d ollama open-webui
+  ${COMPOSE_CMD} --profile cli up -d ollama open-webui || true
 
   # Wait up to 120 s for Ollama API to be ready
   printf "  Waiting for Ollama to be ready..."
@@ -426,7 +426,7 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
     DEFAULT_MODEL="${DEFAULT_MODEL:-llama3.1}"
     if ! curl -sf http://localhost:11434/api/tags | grep -q "${DEFAULT_MODEL}" 2>/dev/null; then
       echo "  Pulling ${DEFAULT_MODEL}..."
-      ollama_pull_progress "${DEFAULT_MODEL}"
+      ollama_pull_progress "${DEFAULT_MODEL}" || true
       echo "  ${DEFAULT_MODEL} ready"
     fi
 
