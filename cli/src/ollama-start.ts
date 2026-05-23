@@ -1,13 +1,22 @@
 import { spawn } from "child_process";
 import chalk from "chalk";
 
+function isLocalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureOllama(baseUrl: string): Promise<void> {
   try {
     const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(2000) });
     if (res.ok) return;
   } catch {}
 
-  const isLocal = /localhost|127\.0\.0\.1/.test(baseUrl);
+  const isLocal = isLocalUrl(baseUrl);
   if (!isLocal) return;
 
   const { execSync } = await import("child_process");

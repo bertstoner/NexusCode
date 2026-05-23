@@ -82,8 +82,7 @@ export async function* streamCerebras(
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Cerebras error (${response.status}): ${text}`);
+    throw new Error(`Cerebras API error (HTTP ${response.status}) — check your API key and model name`);
   }
 
   if (!response.body) {
@@ -104,6 +103,10 @@ export async function* streamCerebras(
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
+    if (buffer.length > 5 * 1024 * 1024) {
+      reader.cancel();
+      throw new Error("Cerebras response exceeded 5MB limit");
+    }
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
 
@@ -145,7 +148,7 @@ export async function* streamCerebras(
           for (const tc of delta.tool_calls) {
             const idx = tc.index;
             if (!partialToolCalls.has(idx)) {
-              partialToolCalls.set(idx, { id: tc.id ?? "", name: "", arguments: "" });
+              partialToolCalls.set(idx, { id: tc.id || `cerebras-${Date.now()}-${idx}`, name: "", arguments: "" });
             }
             const existing = partialToolCalls.get(idx)!;
             if (tc.id) existing.id = tc.id;

@@ -35,13 +35,14 @@ export async function compactHistory(
     },
   ];
 
-  let summary = "";
+  const summaryParts: string[] = [];
   const stream = streamLLM(config, requestMessages, [], COMPACT_SYSTEM_PROMPT, signal);
   for await (const chunk of stream) {
     if (chunk.type === "token" && chunk.content) {
-      summary += chunk.content;
+      summaryParts.push(chunk.content);
     }
   }
+  const summary = summaryParts.join("");
 
   if (!summary.trim()) {
     throw new Error("LLM returned an empty summary — history was not compacted.");

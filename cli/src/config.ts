@@ -35,7 +35,13 @@ export function loadConfig(): Config {
   }
   try {
     const raw = readFileSync(CONFIG_FILE, "utf-8");
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const merged: Config = { ...DEFAULTS, ...JSON.parse(raw) };
+    // Validate critical fields
+    if (!["cerebras", "ollama"].includes(merged.provider)) merged.provider = DEFAULTS.provider;
+    if (typeof merged.maxTokens !== "number" || merged.maxTokens <= 0) merged.maxTokens = DEFAULTS.maxTokens;
+    if (typeof merged.temperature !== "number" || merged.temperature < 0 || merged.temperature > 2) merged.temperature = DEFAULTS.temperature;
+    try { new URL(merged.ollamaBaseUrl); } catch { merged.ollamaBaseUrl = DEFAULTS.ollamaBaseUrl; }
+    return merged;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`Warning: could not parse config file (${msg}), using defaults.\n`);

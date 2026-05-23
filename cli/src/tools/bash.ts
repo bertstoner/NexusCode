@@ -21,10 +21,28 @@ export const bashToolDefinition: ToolDefinition = {
   },
 };
 
+const DANGEROUS_PATTERNS = [
+  /\brm\s+(-[a-z]*r[a-z]*|-[a-z]*f[a-z]*\s+.*\/)\s*[\/~*]/i,
+  /\bdd\b.*\bof=/i,
+  /\bmkfs\b/i,
+  /\bfdisk\b/i,
+  /\bwipefs\b/i,
+  /\bshred\b/i,
+  /:\(\)\{.*\}/,  // fork bomb
+  /\bchmod\s+0+\s+\//i,
+  /\b>\s*\/dev\/(s|h|nv)d/i,
+];
+
 export function executeBash(
   command: string,
   timeoutMs: number = 30000
 ): string {
+  for (const pattern of DANGEROUS_PATTERNS) {
+    if (pattern.test(command)) {
+      return `Blocked: command matches a destructive pattern. If you intended this, run it manually in your terminal.`;
+    }
+  }
+
   const effectiveTimeout = Math.min(timeoutMs, 120000);
 
   try {

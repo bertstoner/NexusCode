@@ -34,6 +34,8 @@ export function renderAssistantEnd(): void {
   process.stdout.write("\n\n");
 }
 
+const trunc = (s: string, n = 60): string => s.length > n ? s.slice(0, n) + "…" : s;
+
 export function renderToolCall(tool: ToolCall): void {
   const icons: Record<string, string> = {
     read_file: "📖",
@@ -47,20 +49,20 @@ export function renderToolCall(tool: ToolCall): void {
   const icon = icons[tool.name] ?? "🔧";
   let summary = "";
   if (tool.name === "read_file") {
-    summary = chalk.dim((tool.input.path as string) ?? "");
+    summary = chalk.dim(trunc((tool.input.path as string) ?? ""));
   } else if (tool.name === "write_file") {
-    summary = chalk.dim((tool.input.path as string) ?? "");
+    summary = chalk.dim(trunc((tool.input.path as string) ?? ""));
   } else if (tool.name === "edit_file") {
-    summary = chalk.dim((tool.input.path as string) ?? "");
+    summary = chalk.dim(trunc((tool.input.path as string) ?? ""));
   } else if (tool.name === "list_directory") {
-    summary = chalk.dim((tool.input.path as string) ?? ".");
+    summary = chalk.dim(trunc((tool.input.path as string) ?? "."));
   } else if (tool.name === "bash") {
     const cmd = (tool.input.command as string) ?? "";
-    summary = chalk.dim(cmd.length > 60 ? cmd.slice(0, 60) + "…" : cmd);
+    summary = chalk.dim(trunc(cmd));
   } else if (tool.name === "web_search") {
-    summary = chalk.dim((tool.input.query as string) ?? "");
+    summary = chalk.dim(trunc((tool.input.query as string) ?? ""));
   } else if (tool.name === "glob") {
-    summary = chalk.dim((tool.input.pattern as string) ?? "");
+    summary = chalk.dim(trunc((tool.input.pattern as string) ?? ""));
   }
   console.log(
     "  " +

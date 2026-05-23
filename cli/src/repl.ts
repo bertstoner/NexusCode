@@ -153,7 +153,7 @@ async function processMessage(
   const systemPrompt = buildSystemPrompt();
 
   let isFirst = true;
-  let assistantContent = "";
+  let assistantContentParts: string[] = [];
   const MAX_TOOL_ROUNDS = 20;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -186,7 +186,7 @@ async function processMessage(
             firstToken = false;
           }
           renderAssistantToken(chunk.content);
-          assistantContent += chunk.content;
+          assistantContentParts.push(chunk.content);
         } else if (chunk.type === "tool_call" && chunk.toolCalls) {
           if (thinkingInterval) {
             clearThinking(thinkingInterval);
@@ -224,8 +224,8 @@ async function processMessage(
     });
 
     if (validToolCalls.length === 0) {
-      if (assistantContent) {
-        history.push({ role: "assistant", content: assistantContent });
+      if (assistantContentParts.length > 0) {
+        history.push({ role: "assistant", content: assistantContentParts.join("") });
       }
       if (validToolCalls.length < pendingToolCalls.length) {
         renderAssistantEnd();
@@ -235,11 +235,11 @@ async function processMessage(
 
     const assistantMsg: Message = {
       role: "assistant",
-      content: assistantContent || "",
+      content: assistantContentParts.join("") || "",
       tool_calls: validToolCalls,
     };
     history.push(assistantMsg);
-    assistantContent = "";
+    assistantContentParts = [];
 
     for (const toolCall of validToolCalls) {
       if (abort.signal.aborted) break;
@@ -455,7 +455,7 @@ async function handleCommand(
         clearThinking(thinking);
         setHistory(compacted);
         renderSuccess(
-          `History compacted: ${originalCount} messages → 2  (~${Math.round(tokensSaved / 4)} tokens saved)`
+          `History compacted: ${originalCount} messages → 2  (~${Math.round(tokensSaved / 4)} tokens saved, approx)`
         );
         console.log();
       } catch (err) {

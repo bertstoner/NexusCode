@@ -363,7 +363,7 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
   # Prompt for a secret key, write to .env, set REPLY.
   prompt_secret() {
     local label="$1" var="$2" existing
-    existing="$(grep "^${var}=" .env 2>/dev/null | cut -d'=' -f2-)"
+    existing="$(grep -F "^${var}=" .env 2>/dev/null | cut -d'=' -f2-)"
     if [ -n "${existing}" ]; then
       printf "  %s [keep existing]: " "${label}" > /dev/tty
     else
@@ -372,7 +372,8 @@ if [ "${SKIP_CONTAINERS}" != "1" ]; then
     read_secret                          # sets REPLY
     REPLY="${REPLY:-${existing}}"
     if [ -n "${REPLY}" ]; then
-      grep -v "^${var}=" .env > /tmp/.env.nexus.tmp && mv /tmp/.env.nexus.tmp .env
+      local tmpfile
+      tmpfile="$(mktemp)" && grep -v "^${var}=" .env > "${tmpfile}" && mv "${tmpfile}" .env
       printf '%s=%s\n' "${var}" "${REPLY}" >> .env
     fi
   }

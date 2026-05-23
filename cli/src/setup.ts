@@ -38,6 +38,12 @@ function promptSelect(label: string, items: string[], defaultIndex = 0): Promise
     stdin.resume();
     stdin.setEncoding("utf-8");
 
+    const cleanup = () => {
+      if (stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
+      stdin.pause();
+      stdin.removeListener("data", onData);
+    };
+
     const onData = (chunk: string) => {
       if (done) return;
 
@@ -51,12 +57,11 @@ function promptSelect(label: string, items: string[], defaultIndex = 0): Promise
         render();
       } else if (chunk === "\r" || chunk === "\n" || chunk === "") {
         done = true;
-        if (stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
-        stdin.pause();
-        stdin.removeListener("data", onData);
+        cleanup();
         console.log();
         resolve(selected);
       } else if (chunk === "") {
+        cleanup();
         process.exit(0);
       }
     };
@@ -191,9 +196,14 @@ export async function runSetup(isFirstRun = false): Promise<void> {
     if (modelIdx === 0) model = "llama3.3-70b";
     else if (modelIdx === 1) model = "llama3.1-8b";
     else {
-      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      model = await prompt(rl, chalk.dim("  Model name: "));
-      rl.close();
+      {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        try {
+          model = await prompt(rl, chalk.dim("  Model name: "));
+        } finally {
+          rl.close();
+        }
+      }
     }
 
     // Tavily
@@ -221,10 +231,16 @@ export async function runSetup(isFirstRun = false): Promise<void> {
     console.log(chalk.bold.white("  ── Ollama ──────────────────────────────────"));
     console.log();
 
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const defaultUrl = config.ollamaBaseUrl || "http://localhost:11434";
-    const ollamaUrl = await prompt(rl, chalk.dim(`  Ollama URL [${defaultUrl}]: `));
-    rl.close();
+    let ollamaUrl: string;
+    {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        ollamaUrl = await prompt(rl, chalk.dim(`  Ollama URL [${defaultUrl}]: `));
+      } finally {
+        rl.close();
+      }
+    }
     const finalUrl = ollamaUrl || defaultUrl;
 
     console.log(chalk.dim("  Checking available models…"));
@@ -252,9 +268,14 @@ export async function runSetup(isFirstRun = false): Promise<void> {
       else if (modelIdx === 2) model = "mistral";
       else if (modelIdx === 3) model = "codellama";
       else {
-        const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
-        model = await prompt(rl2, chalk.dim("  Model name: "));
-        rl2.close();
+        {
+          const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+          try {
+            model = await prompt(rl2, chalk.dim("  Model name: "));
+          } finally {
+            rl2.close();
+          }
+        }
       }
     } else {
       const modelItems = [
@@ -270,9 +291,14 @@ export async function runSetup(isFirstRun = false): Promise<void> {
       if (modelIdx < models.length) {
         model = models[modelIdx];
       } else {
-        const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
-        model = await prompt(rl2, chalk.dim("  Model name: "));
-        rl2.close();
+        {
+          const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+          try {
+            model = await prompt(rl2, chalk.dim("  Model name: "));
+          } finally {
+            rl2.close();
+          }
+        }
       }
     }
 

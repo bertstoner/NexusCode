@@ -4,9 +4,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-nexuscode}
-      POSTGRES_USER: ${POSTGRES_USER:-nexus}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus}
+      POSTGRES_DB: "${POSTGRES_DB:-nexuscode}"
+      POSTGRES_USER: "${POSTGRES_USER:-nexus}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-nexus}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
       target: base
     command: pnpm --filter @workspace/db run push
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexuscode}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexuscode}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,8 +35,8 @@ services:
       target: api-server
     environment:
       PORT: 8080
-      NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexuscode}
+      NODE_ENV: "${NODE_ENV:-production}"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexuscode}"
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:
@@ -86,11 +86,11 @@ services:
       WEBUI_AUTH: "false"
       # Cerebras as an OpenAI-compatible provider (only active if key is set)
       OPENAI_API_BASE_URL: https://api.cerebras.ai/v1
-      OPENAI_API_KEY: ${CEREBRAS_API_KEY:-}
+      OPENAI_API_KEY: "${CEREBRAS_API_KEY:-}"
       # Tavily web search (only active if key is set)
-      ENABLE_RAG_WEB_SEARCH: ${TAVILY_API_KEY:+true}
+      ENABLE_RAG_WEB_SEARCH: "${TAVILY_API_KEY:+true}"
       RAG_WEB_SEARCH_ENGINE: tavily
-      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      TAVILY_API_KEY: "${TAVILY_API_KEY:-}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -111,9 +111,9 @@ services:
       target: cli
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
-      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
-      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.1}"
+      CEREBRAS_API_KEY: "${CEREBRAS_API_KEY:-}"
+      TAVILY_API_KEY: "${TAVILY_API_KEY:-}"
     volumes:
       - code_ai_config:/root/.config/code-ai
       - .:/workspace

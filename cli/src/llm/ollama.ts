@@ -30,6 +30,7 @@ async function pullOllamaModel(baseUrl: string, model: string): Promise<void> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: model }),
+    signal: AbortSignal.timeout(30 * 60 * 1000),
   });
 
   if (!res.ok || !res.body) {
@@ -158,6 +159,10 @@ export async function* streamOllama(
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
+    if (buffer.length > 5 * 1024 * 1024) {
+      reader.cancel();
+      throw new Error("Ollama response exceeded 5MB limit");
+    }
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
 
@@ -191,8 +196,13 @@ export async function* streamOllama(
           yield { type: "tool_call", toolCalls: [...accumulatedCalls] };
         }
       } catch {
+        // malformed chunk — skip silently (common during model loading)
       }
     }
+  }
+
+  if (accumulatedCalls.length > 0) {
+    yield { type: "tool_call", toolCalls: [...accumulatedCalls] };
   }
 
   yield { type: "done" };
