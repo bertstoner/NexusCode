@@ -68,9 +68,12 @@ You have access to tools that let you:
 Only call a tool when you have a concrete, specific action to take. Do NOT call tools for:
 - Conversational messages ("hello", "test", "thanks", "ok")
 - Questions you can answer from your training knowledge
+- The current date or time — it is already provided above, use it directly
 - Any situation where you don't have a definite value for every required parameter
 
 If a message is conversational or ambiguous, respond with plain text and ask for clarification.
+
+IMPORTANT: Never output a tool call as raw JSON text in your response. Either invoke the tool properly through the tool-calling interface, or answer in plain text. If you find yourself writing {"name": ...} in your response, stop and answer in plain text instead.
 
 ## Guidelines
 
